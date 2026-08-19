@@ -1,0 +1,65 @@
+{
+  "region": "Воронеж",
+  "courts": [
+    {
+      "id": "sovetsky",
+      "name": "Советский районный суд г. Воронежа",
+      "district": "Советский",
+      "official_url": "https://sovetsky--vrn.sudrf.ru/",
+      "pages": {
+        "about": "https://sovetsky--vrn.sudrf.ru/modules.php?name=info_court",
+        "cases": "https://sovetsky--vrn.sudrf.ru/modules.php?name=sud_delo"
+      }
+    },
+    {
+      "id": "kominternovsky",
+      "name": "Коминтерновский районный суд г. Воронежа",
+      "district": "Коминтерновский",
+      "official_url": "https://kominternovsky--vrn.sudrf.ru/",
+      "pages": {
+        "about": "https://kominternovsky--vrn.sudrf.ru/modules.php?name=info_court",
+        "cases": "https://kominternovsky--vrn.sudrf.ru/modules.php?name=sud_delo"
+      }
+    },
+    {
+      "id": "zheleznodorozhny",
+      "name": "Железнодорожный районный суд г. Воронежа",
+      "district": "Железнодорожный",
+      "official_url": "https://zheleznodorozhny--vrn.sudrf.ru/",
+      "pages": {
+        "about": "https://zheleznodorozhny--vrn.sudrf.ru/modules.php?name=info_court",
+        "cases": "https://zheleznodorozhny--vrn.sudrf.ru/modules.php?name=sud_delo"
+      }
+    },
+    {
+      "id": "levoberezhny",
+      "name": "Левобережный районный суд г. Воронежа",
+      "district": "Левобережный",
+      "official_url": "https://levoberezhny--vrn.sudrf.ru/",
+      "pages": {
+        "about": "https://levoberezhny--vrn.sudrf.ru/modules.php?name=info_court",
+        "cases": "https://levoberezhny--vrn.sudrf.ru/modules.php?name=sud_delo"
+      }
+    },
+    {
+      "id": "centralny",
+      "name": "Центральный районный суд г. Воронежа",
+      "district": "Центральный",
+      "official_url": "https://centralny--vrn.sudrf.ru/",
+      "pages": {
+        "about": "https://centralny--vrn.sudrf.ru/modules.php?name=info_court",
+        "cases": "https://centralny--vrn.sudrf.ru/modules.php?name=sud_delo"
+      }
+    },
+    {
+      "id": "leninsky",
+      "name": "Ленинский районный суд г. Воронежа",
+      "district": "Ленинский",
+      "official_url": "https://lensud--vrn.sudrf.ru/",
+      "pages": {
+        "about": "https://lensud--vrn.sudrf.ru/modules.php?name=info_court",
+        "cases": "https://lensud--vrn.sudrf.ru/modules.php?name=sud_delo"
+      }
+    }
+  ]
+}
