@@ -5,7 +5,31 @@ from api.main import app
 client = TestClient(app)
 
 
-def test_health():
+def test_list_courts_returns_six_voronezh_courts():
+    response = client.get("/courts")
+    assert response.status_code == 200
+    slugs = {c["slug"] for c in response.json()["courts"]}
+    assert slugs == {
+        "sovetsky-vrn",
+        "kominternovsky-vrn",
+        "zheleznodorozhny-vrn",
+        "levoberezhny-vrn",
+        "centralny-vrn",
+        "lensud-vrn",
+    }
+
+
+def test_list_courts_also_accepts_post():
+    response = client.post("/courts")
+    assert response.status_code == 200
+    assert len(response.json()["courts"]) == 6
+
+
+def test_corpus_export_empty():
+    response = client.get("/corpus/export")
+    assert response.status_code == 200
+    assert response.json()["count"] == 0
+    assert response.json()["documents"] == []
     response = client.get("/health")
     assert response.status_code == 200
     assert response.json() == {"status": "ok"}

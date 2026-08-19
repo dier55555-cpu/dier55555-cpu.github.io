@@ -87,9 +87,13 @@ court-kb/
   api/
     main.py                # HTTP-обёртка (FastAPI) над той же логикой — для вебхуков/n8n
   n8n/
-    case-lookup-webhook.json  # пример workflow: webhook -> HTTP Request -> ответ агенту
-    scheduled-crawl.json       # пример workflow: расписание -> обход -> заливка в БЗ
-  Dockerfile               # контейнер для api/main.py
+    README.md                  # как импортировать воркфлоу в n8n НОЕ
+    court-agent-webhook.json   # основной webhook агента (list_courts / kb_search / case_lookup)
+    scheduled-crawl.json       # ночной обход сайтов
+    case-lookup-webhook.json   # узкий вариант только слоя 2
+  Dockerfile
+  docker-compose.yml
+  .env.example
   tests/                   # юнит-тесты на синтетических HTML-фикстурах
   data/                   # результат обхода (в git не коммитится)
 ```
@@ -247,9 +251,15 @@ python -m scraper.case_lookup.discover \
 
 ## Интеграция через вебхук / n8n (домен и сервер НОЕ)
 
-Частый вопрос: можно ли обойтись сервером/доменом самой платформы НОЕ и её
-встроенным n8n, не поднимая отдельный VPS? **Рекомендация — гибридная
-схема**, и вот почему.
+Готовый пакет для импорта лежит в `n8n/` — пошаговая инструкция: [`n8n/README.md`](n8n/README.md).
+
+Кратко:
+
+1. На сервере НОЕ: `cp .env.example .env` → `docker compose up -d --build`.
+2. В n8n: Import from File → `n8n/court-agent-webhook.json`, включить Active, URL вебхука отдать агенту.
+3. Ночной обход: Import → `n8n/scheduled-crawl.json`.
+
+Перед этим обязательно проверьте IP сервера НОЕ (см. «Шаг 0» ниже).
 
 ### Шаг 0 (обязательно, до любого выбора архитектуры): проверить IP сервера НОЕ
 
@@ -325,10 +335,12 @@ docker build -t court-kb-api . && docker run -p 8080:8080 --env-file .env court-
 Эндпоинты:
 
 - `GET /health` — проверка живости.
+- `GET|POST /courts` — список судов (slug, название, включён ли поиск дел).
 - `POST /kb/search` `{query, court_slug?, top_k?}` — слой 1.
 - `POST /case-lookup` `{court_slug, case_number?, last_name?, production_type?}` — слой 2.
 - `POST /crawl` `?max_pages&max_depth` — запускает обход всех судов в фоне (202 Accepted).
 - `GET /crawl/status` — сводка последнего обхода (то же, что `data/summary.json`).
+- `GET /corpus/export` — выгрузка корпуса для заливки в БЗ агента.
 
 Все "мутирующие"/приватные эндпоинты защищены заголовком `X-API-Key`
 (сверяется с `COURT_KB_API_KEY`) — обязательно задайте его, если сервис

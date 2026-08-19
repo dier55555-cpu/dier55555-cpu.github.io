@@ -82,6 +82,44 @@ def health() -> dict:
     return {"status": "ok"}
 
 
+@app.api_route("/courts", methods=["GET", "POST"])
+def list_courts(x_api_key: Optional[str] = Header(default=None)) -> dict:
+    """Список судов из courts.yaml — агент/n8n используют, чтобы выбрать court_slug."""
+    _check_api_key(x_api_key)
+    courts_config = _load_courts_config(COURTS_CONFIG_PATH)
+    courts = []
+    for slug, court in sorted(courts_config.items()):
+        case_search = court.get("case_search") or {}
+        courts.append({
+            "slug": slug,
+            "name": court["name"],
+            "base_url": court["base_url"],
+            "case_search_enabled": bool(case_search.get("enabled")),
+            "production_types": list((case_search.get("production_types") or {}).keys()),
+        })
+    return {"courts": courts}
+
+
+@app.get("/corpus/export")
+def corpus_export(x_api_key: Optional[str] = Header(default=None)) -> dict:
+    """Выгрузка собранного корпуса (слой 1) для заливки в БЗ агента через n8n."""
+    _check_api_key(x_api_key)
+    entries = load_corpus(CORPUS_PATH)
+    return {
+        "count": len(entries),
+        "documents": [
+            {
+                "court_slug": e.court_slug,
+                "court_name": e.court_name,
+                "url": e.url,
+                "title": e.title,
+                "text": e.text,
+            }
+            for e in entries
+        ],
+    }
+
+
 @app.post("/kb/search", response_model=KbSearchResponse)
 def kb_search(payload: KbSearchRequest, x_api_key: Optional[str] = Header(default=None)) -> KbSearchResponse:
     """Слой 1: поиск ответа в заранее собранной базе знаний (data/corpus.jsonl)."""

@@ -1,5 +1,5 @@
 {
-  "name": "court-kb: case lookup webhook",
+  "name": "court-kb: case lookup webhook (только слой 2)",
   "nodes": [
     {
       "parameters": {
@@ -12,72 +12,83 @@
       "name": "Webhook (агент дёргает сюда)",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2,
-      "position": [-400, 0],
+      "position": [0, 300],
       "webhookId": "court-case-lookup"
     },
     {
       "parameters": {
         "method": "POST",
-        "url": "http://court-kb-api:8080/case-lookup",
+        "url": "={{ ($env.COURT_KB_API_URL || 'http://127.0.0.1:8080') + '/case-lookup' }}",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
             {
               "name": "X-API-Key",
               "value": "={{$env.COURT_KB_API_KEY}}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
             }
           ]
         },
         "sendBody": true,
-        "bodyParameters": {
-          "parameters": [
-            { "name": "court_slug", "value": "={{$json.body.court_slug}}" },
-            { "name": "case_number", "value": "={{$json.body.case_number}}" },
-            { "name": "last_name", "value": "={{$json.body.last_name}}" },
-            { "name": "production_type", "value": "={{$json.body.production_type || 'civil_first_instance'}}" }
-          ]
-        },
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ court_slug: $json.body.court_slug, case_number: $json.body.case_number, last_name: $json.body.last_name, production_type: $json.body.production_type || 'civil_first_instance' }) }}",
         "options": {
-          "timeout": 60000
+          "timeout": 90000
         }
       },
       "id": "call-court-kb-api",
       "name": "HTTP Request -> court-kb API",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [-160, 0]
+      "position": [240, 300]
     },
     {
       "parameters": {
         "respondWith": "json",
-        "responseBody": "={{ { \"status\": $json.status, \"result\": $json.result } }}",
+        "responseBody": "={{ { status: $json.status, result: $json.result } }}",
         "options": {}
       },
       "id": "respond-to-webhook",
       "name": "Ответ агенту",
       "type": "n8n-nodes-base.respondToWebhook",
-      "typeVersion": 1.2,
-      "position": [80, 0]
+      "typeVersion": 1.1,
+      "position": [480, 300]
     }
   ],
   "connections": {
     "Webhook (агент дёргает сюда)": {
       "main": [
         [
-          { "node": "HTTP Request -> court-kb API", "type": "main", "index": 0 }
+          {
+            "node": "HTTP Request -> court-kb API",
+            "type": "main",
+            "index": 0
+          }
         ]
       ]
     },
     "HTTP Request -> court-kb API": {
       "main": [
         [
-          { "node": "Ответ агенту", "type": "main", "index": 0 }
+          {
+            "node": "Ответ агенту",
+            "type": "main",
+            "index": 0
+          }
         ]
       ]
     }
   },
+  "pinData": {},
   "active": false,
   "settings": {
     "executionOrder": "v1"
-  }
+  },
+  "meta": {
+    "templateCredsSetupCompleted": true
+  },
+  "tags": []
 }

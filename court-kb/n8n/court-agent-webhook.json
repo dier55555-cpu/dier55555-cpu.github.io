@@ -1,0 +1,167 @@
+{
+  "name": "Суды Воронежа — вебхук агента (слой 1 + слой 2)",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "court-agent",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-trigger",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [0, 300],
+      "webhookId": "court-agent"
+    },
+    {
+      "parameters": {
+        "jsCode": "const raw = $input.first().json;\nconst body = raw.body && typeof raw.body === 'object' ? raw.body : raw;\n\nconst action = body.action\n  || (body.case_number || body.last_name ? 'case_lookup'\n    : (body.query ? 'kb_search' : 'list_courts'));\n\nconst api = ($env.COURT_KB_API_URL || 'http://127.0.0.1:8080').replace(/\\/$/, '');\nconst apiKey = $env.COURT_KB_API_KEY || '';\n\nlet method = 'POST';\nlet url = api;\nlet payload = {};\n\nif (action === 'case_lookup') {\n  if (!body.court_slug) {\n    return [{ json: { skipHttp: true, status: 'error', result: 'Нужно указать court_slug (например, sovetsky-vrn). Сначала вызовите action=list_courts.' } }];\n  }\n  if (!body.case_number && !body.last_name) {\n    return [{ json: { skipHttp: true, status: 'error', result: 'Нужно указать case_number или last_name.' } }];\n  }\n  url = api + '/case-lookup';\n  payload = {\n    court_slug: body.court_slug,\n    case_number: body.case_number || null,\n    last_name: body.last_name || null,\n    production_type: body.production_type || 'civil_first_instance',\n  };\n} else if (action === 'kb_search') {\n  if (!body.query) {\n    return [{ json: { skipHttp: true, status: 'error', result: 'Нужно указать query.' } }];\n  }\n  url = api + '/kb/search';\n  payload = {\n    query: body.query,\n    court_slug: body.court_slug || null,\n    top_k: body.top_k || 3,\n  };\n} else if (action === 'list_courts') {\n  url = api + '/courts';\n  payload = {};\n} else {\n  return [{ json: { skipHttp: true, status: 'error', result: 'Неизвестное action: ' + action + '. Допустимо: case_lookup, kb_search, list_courts.' } }];\n}\n\nreturn [{ json: { skipHttp: false, method, url, payload, apiKey, action } }];"
+      },
+      "id": "normalize-payload",
+      "name": "Разобрать запрос агента",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{$json.skipHttp}}",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "id": "if-skip-http",
+      "name": "Ошибка валидации?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [480, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{$json.url}}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-API-Key",
+              "value": "={{$json.apiKey}}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.payload) }}",
+        "options": {
+          "timeout": 90000,
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
+      },
+      "id": "call-api",
+      "name": "HTTP Request -> court-kb API",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [720, 180]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { status: $json.status || 'ok', result: $json.result || $json, courts: $json.courts } }}",
+        "options": {}
+      },
+      "id": "respond-ok",
+      "name": "Ответ агенту (из API)",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [960, 180]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { status: $json.status || 'error', result: $json.result } }}",
+        "options": {}
+      },
+      "id": "respond-error",
+      "name": "Ответ агенту (ошибка)",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [720, 420]
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Разобрать запрос агента",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Разобрать запрос агента": {
+      "main": [
+        [
+          {
+            "node": "Ошибка валидации?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ошибка валидации?": {
+      "main": [
+        [
+          {
+            "node": "Ответ агенту (ошибка)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "HTTP Request -> court-kb API",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request -> court-kb API": {
+      "main": [
+        [
+          {
+            "node": "Ответ агенту (из API)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "meta": {
+    "templateCredsSetupCompleted": true
+  },
+  "tags": []
+}

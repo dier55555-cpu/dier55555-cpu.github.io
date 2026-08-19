@@ -1,11 +1,14 @@
 {
-  "name": "court-kb: scheduled crawl (слой 1)",
+  "name": "Суды Воронежа — ночной обход сайтов (слой 1)",
   "nodes": [
     {
       "parameters": {
         "rule": {
           "interval": [
-            { "field": "hours", "hoursInterval": 24, "triggerAtHour": 3 }
+            {
+              "field": "cronExpression",
+              "expression": "0 3 * * *"
+            }
           ]
         }
       },
@@ -13,42 +16,53 @@
       "name": "Каждую ночь в 03:00",
       "type": "n8n-nodes-base.scheduleTrigger",
       "typeVersion": 1.2,
-      "position": [-600, 0]
+      "position": [0, 300]
     },
     {
       "parameters": {
         "method": "POST",
-        "url": "http://court-kb-api:8080/crawl",
+        "url": "={{ ($env.COURT_KB_API_URL || 'http://127.0.0.1:8080') + '/crawl?max_pages=60&max_depth=2' }}",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
-            { "name": "X-API-Key", "value": "={{$env.COURT_KB_API_KEY}}" }
+            {
+              "name": "X-API-Key",
+              "value": "={{$env.COURT_KB_API_KEY}}"
+            }
           ]
         },
-        "options": { "timeout": 10000 }
+        "options": {
+          "timeout": 15000
+        }
       },
       "id": "trigger-crawl",
-      "name": "POST /crawl (запуск обхода)",
+      "name": "POST /crawl",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [-360, 0]
+      "position": [240, 300]
     },
     {
-      "parameters": { "amount": 10, "unit": "minutes" },
+      "parameters": {
+        "amount": 15,
+        "unit": "minutes"
+      },
       "id": "wait-node",
-      "name": "Подождать (обход занимает время)",
+      "name": "Подождать 15 минут",
       "type": "n8n-nodes-base.wait",
       "typeVersion": 1.1,
-      "position": [-120, 0]
+      "position": [480, 300]
     },
     {
       "parameters": {
         "method": "GET",
-        "url": "http://court-kb-api:8080/crawl/status",
+        "url": "={{ ($env.COURT_KB_API_URL || 'http://127.0.0.1:8080') + '/crawl/status' }}",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
-            { "name": "X-API-Key", "value": "={{$env.COURT_KB_API_KEY}}" }
+            {
+              "name": "X-API-Key",
+              "value": "={{$env.COURT_KB_API_KEY}}"
+            }
           ]
         }
       },
@@ -56,50 +70,82 @@
       "name": "GET /crawl/status",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [120, 0]
+      "position": [720, 300]
     },
     {
       "parameters": {
-        "method": "POST",
-        "url": "={{$env.NOE_KB_UPLOAD_URL}}",
+        "method": "GET",
+        "url": "={{ ($env.COURT_KB_API_URL || 'http://127.0.0.1:8080') + '/corpus/export' }}",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
-            { "name": "Authorization", "value": "Bearer ={{$env.NOE_API_TOKEN}}" }
+            {
+              "name": "X-API-Key",
+              "value": "={{$env.COURT_KB_API_KEY}}"
+            }
           ]
-        },
-        "sendBody": true,
-        "bodyParameters": {
-          "parameters": [
-            { "name": "source", "value": "court-kb" },
-            { "name": "documents", "value": "={{$json.courts}}" }
-          ]
-        },
-        "options": {}
+        }
       },
-      "id": "upload-to-noe-kb",
-      "name": "Заливка в БЗ НОЕ (доработать под реальный API платформы)",
+      "id": "export-corpus",
+      "name": "GET /corpus/export",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [360, 0]
+      "position": [960, 300]
     }
   ],
   "connections": {
     "Каждую ночь в 03:00": {
-      "main": [[{ "node": "POST /crawl (запуск обхода)", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "POST /crawl",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
-    "POST /crawl (запуск обхода)": {
-      "main": [[{ "node": "Подождать (обход занимает время)", "type": "main", "index": 0 }]]
+    "POST /crawl": {
+      "main": [
+        [
+          {
+            "node": "Подождать 15 минут",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
-    "Подождать (обход занимает время)": {
-      "main": [[{ "node": "GET /crawl/status", "type": "main", "index": 0 }]]
+    "Подождать 15 минут": {
+      "main": [
+        [
+          {
+            "node": "GET /crawl/status",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "GET /crawl/status": {
-      "main": [[{ "node": "Заливка в БЗ НОЕ (доработать под реальный API платформы)", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "GET /corpus/export",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     }
   },
+  "pinData": {},
   "active": false,
   "settings": {
     "executionOrder": "v1"
-  }
+  },
+  "meta": {
+    "templateCredsSetupCompleted": true
+  },
+  "tags": []
 }
