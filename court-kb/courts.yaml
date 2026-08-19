@@ -2,27 +2,73 @@
 # slug — короткий идентификатор суда, используется для имён файлов и в ответах инструмента.
 # name — человекочитаемое название (подставится в карточки знаний).
 # base_url — стартовая страница сайта.
+#
+# case_search — настройки слоя 2 (поиск дела по номеру/ФИО, модуль sud_delo).
+# production_types.delo_id — коды типов производства. Значения ниже (1540005 —
+# гражданские первой инстанции, 1540006 — уголовные первой инстанции)
+# подтверждены на других сайтах ГАС «Правосудие» (СПб, Башкортостан) и, судя
+# по всему, одинаковы для всей платформы, но для ЭТИХ 6 судов Воронежа их
+# нужно проверить через `scraper.case_lookup.discover` с российского IP,
+# прежде чем включать `enabled: true`.
+# field_overrides — заполняется по итогам discover.py, если автоматическое
+# сопоставление подписи->имя поля не сработало для конкретного суда.
 courts:
   - slug: sovetsky-vrn
     name: Советский районный суд г. Воронежа
     base_url: https://sovetsky--vrn.sudrf.ru/
+    case_search:
+      enabled: false  # включить после проверки discover.py с RU IP
+      production_types:
+        civil_first_instance: 1540005
+        criminal_first_instance: 1540006
+      field_overrides: {}
 
   - slug: kominternovsky-vrn
     name: Коминтерновский районный суд г. Воронежа
     base_url: https://kominternovsky--vrn.sudrf.ru/
+    case_search:
+      enabled: false
+      production_types:
+        civil_first_instance: 1540005
+        criminal_first_instance: 1540006
+      field_overrides: {}
 
   - slug: zheleznodorozhny-vrn
     name: Железнодорожный районный суд г. Воронежа
     base_url: https://zheleznodorozhny--vrn.sudrf.ru/
+    case_search:
+      enabled: false
+      production_types:
+        civil_first_instance: 1540005
+        criminal_first_instance: 1540006
+      field_overrides: {}
 
   - slug: levoberezhny-vrn
     name: Левобережный районный суд г. Воронежа
     base_url: https://levoberezhny--vrn.sudrf.ru/
+    case_search:
+      enabled: false
+      production_types:
+        civil_first_instance: 1540005
+        criminal_first_instance: 1540006
+      field_overrides: {}
 
   - slug: centralny-vrn
     name: Центральный районный суд г. Воронежа
     base_url: https://centralny--vrn.sudrf.ru/
+    case_search:
+      enabled: false
+      production_types:
+        civil_first_instance: 1540005
+        criminal_first_instance: 1540006
+      field_overrides: {}
 
   - slug: lensud-vrn
     name: Ленинский районный суд г. Воронежа
     base_url: https://lensud--vrn.sudrf.ru/
+    case_search:
+      enabled: false
+      production_types:
+        civil_first_instance: 1540005
+        criminal_first_instance: 1540006
+      field_overrides: {}

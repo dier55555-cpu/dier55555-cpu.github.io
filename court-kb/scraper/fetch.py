@@ -117,6 +117,13 @@ class Fetcher:
         return any(marker in html for marker in BLOCK_MARKERS)
 
     def get(self, url: str, respect_robots: bool = True) -> FetchResult:
+        return self.request("GET", url, respect_robots=respect_robots)
+
+    def post(self, url: str, data: dict, respect_robots: bool = True) -> FetchResult:
+        return self.request("POST", url, data=data, respect_robots=respect_robots)
+
+    def request(self, method: str, url: str, params: Optional[dict] = None,
+                data: Optional[dict] = None, respect_robots: bool = True) -> FetchResult:
         if respect_robots and not self.allowed_by_robots(url):
             return FetchResult(url, ok=False, blocked=False, status_code=None,
                                 html=None, error="disallowed by robots.txt")
@@ -124,8 +131,11 @@ class Fetcher:
         last_error = None
         for attempt in range(1, self.max_retries + 1):
             try:
-                resp = self.session.get(
+                resp = self.session.request(
+                    method,
                     url,
+                    params=params,
+                    data=data,
                     headers={"User-Agent": self.user_agent, "Accept-Language": "ru-RU,ru;q=0.9"},
                     proxies=self.proxies,
                     timeout=self.timeout,
@@ -157,3 +167,18 @@ class Fetcher:
 
         return FetchResult(url, ok=False, blocked=False, status_code=None,
                             html=None, error=last_error or "unknown error")
+
+    def get_bytes(self, url: str) -> Optional[bytes]:
+        """Скачивает бинарный ресурс (например, картинку капчи) без декодирования в текст."""
+        try:
+            resp = self.session.get(
+                url,
+                headers={"User-Agent": self.user_agent},
+                proxies=self.proxies,
+                timeout=self.timeout,
+            )
+        except requests.RequestException:
+            return None
+        if resp.status_code != 200:
+            return None
+        return resp.content
