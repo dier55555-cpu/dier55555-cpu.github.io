@@ -1,0 +1,83 @@
+{
+  "name": "court-kb: case lookup webhook",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "court-case-lookup",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-trigger",
+      "name": "Webhook (агент дёргает сюда)",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [-400, 0],
+      "webhookId": "court-case-lookup"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://court-kb-api:8080/case-lookup",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-API-Key",
+              "value": "={{$env.COURT_KB_API_KEY}}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            { "name": "court_slug", "value": "={{$json.body.court_slug}}" },
+            { "name": "case_number", "value": "={{$json.body.case_number}}" },
+            { "name": "last_name", "value": "={{$json.body.last_name}}" },
+            { "name": "production_type", "value": "={{$json.body.production_type || 'civil_first_instance'}}" }
+          ]
+        },
+        "options": {
+          "timeout": 60000
+        }
+      },
+      "id": "call-court-kb-api",
+      "name": "HTTP Request -> court-kb API",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [-160, 0]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { \"status\": $json.status, \"result\": $json.result } }}",
+        "options": {}
+      },
+      "id": "respond-to-webhook",
+      "name": "Ответ агенту",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.2,
+      "position": [80, 0]
+    }
+  ],
+  "connections": {
+    "Webhook (агент дёргает сюда)": {
+      "main": [
+        [
+          { "node": "HTTP Request -> court-kb API", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "HTTP Request -> court-kb API": {
+      "main": [
+        [
+          { "node": "Ответ агенту", "type": "main", "index": 0 }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  }
+}
