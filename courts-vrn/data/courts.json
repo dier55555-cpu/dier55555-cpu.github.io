@@ -1,0 +1,126 @@
+{
+  "region": "Воронежская область",
+  "city": "Воронеж",
+  "updated": "2026-08-19",
+  "source_note": "Контакты сверены по открытым карточкам судов ГАС «Правосудие» и справочникам. Перед ответом клиенту сверяйте спорные поля на официальном сайте суда. Живой парсинг sudrf с облачных IP часто обрывается (BigIP / TLS reset).",
+  "work_hours_typical": {
+    "mon_thu": "09:00–18:00",
+    "fri": "09:00–16:45",
+    "lunch": "13:00–13:45",
+    "weekend": "суббота, воскресенье и праздники — выходные",
+    "visit": "При обращении нужен паспорт; представителю — доверенность"
+  },
+  "gas_modules": {
+    "info": "modules.php?name=info_court",
+    "cases": "modules.php?name=sud_delo",
+    "territorial": "modules.php?name=territorial",
+    "schedule": "modules.php?name=grafic"
+  },
+  "courts": [
+    {
+      "id": "sovetsky",
+      "name": "Советский районный суд г. Воронежа",
+      "district": "Советский",
+      "host": "https://sovetsky--vrn.sudrf.ru",
+      "site_alias": "http://sovetsky.vrn.sudrf.ru",
+      "address": "394051, г. Воронеж, ул. Домостроителей, д. 26",
+      "email": "sovetsky.vrn@sudrf.ru",
+      "phones": {
+        "reception": "+7 (473) 278-82-52",
+        "fax": "+7 (473) 225-66-83",
+        "civil_chancery": "+7 (473) 278-62-97",
+        "criminal_chancery": "+7 (473) 263-29-03",
+        "archive": "+7 (473) 278-82-54"
+      },
+      "search_url": "https://sovetsky--vrn.sudrf.ru/modules.php?name=sud_delo",
+      "info_url": "https://sovetsky--vrn.sudrf.ru/modules.php?name=info_court"
+    },
+    {
+      "id": "kominternovsky",
+      "name": "Коминтерновский районный суд г. Воронежа",
+      "district": "Коминтерновский",
+      "host": "https://kominternovsky--vrn.sudrf.ru",
+      "site_alias": "http://kominternovsky.vrn.sudrf.ru",
+      "address": "394026, г. Воронеж, пр-т Труда, д. 46",
+      "email": "kominternovsky.vrn@sudrf.ru",
+      "phones": {
+        "reception": "+7 (473) 246-63-48",
+        "civil_chancery": "+7 (473) 246-78-37",
+        "criminal_chancery": "+7 (473) 221-09-05",
+        "archive": "+7 (473) 246-63-69"
+      },
+      "search_url": "https://kominternovsky--vrn.sudrf.ru/modules.php?name=sud_delo",
+      "info_url": "https://kominternovsky--vrn.sudrf.ru/modules.php?name=info_court"
+    },
+    {
+      "id": "zheleznodorozhny",
+      "name": "Железнодорожный районный суд г. Воронежа",
+      "district": "Железнодорожный",
+      "host": "https://zheleznodorozhny--vrn.sudrf.ru",
+      "site_alias": "http://zheleznodorozhny.vrn.sudrf.ru",
+      "address": "394063, г. Воронеж, Ленинский пр-т, д. 157",
+      "email": "zheleznodorozhny.vrn@sudrf.ru",
+      "phones": {
+        "reception": "+7 (473) 224-06-41",
+        "civil_chancery": "+7 (473) 223-96-06",
+        "criminal_chancery": "+7 (473) 244-66-13",
+        "archive": "+7 (473) 244-65-14"
+      },
+      "search_url": "https://zheleznodorozhny--vrn.sudrf.ru/modules.php?name=sud_delo",
+      "info_url": "https://zheleznodorozhny--vrn.sudrf.ru/modules.php?name=info_court"
+    },
+    {
+      "id": "levoberezhny",
+      "name": "Левобережный районный суд г. Воронежа",
+      "district": "Левобережный",
+      "host": "https://levoberezhny--vrn.sudrf.ru",
+      "site_alias": "http://levoberezhny.vrn.sudrf.ru",
+      "address": "394029, г. Воронеж, наб. Авиастроителей, д. 18А",
+      "email": "levoberezhny.vrn@sudrf.ru",
+      "phones": {
+        "reception": "+7 (473) 249-42-38",
+        "civil_chancery": "+7 (473) 248-58-11",
+        "criminal_chancery": "+7 (473) 249-70-69",
+        "archive": "+7 (473) 248-45-36"
+      },
+      "search_url": "https://levoberezhny--vrn.sudrf.ru/modules.php?name=sud_delo",
+      "info_url": "https://levoberezhny--vrn.sudrf.ru/modules.php?name=info_court"
+    },
+    {
+      "id": "centralny",
+      "name": "Центральный районный суд г. Воронежа",
+      "district": "Центральный",
+      "host": "https://centralny--vrn.sudrf.ru",
+      "site_alias": "http://centralny.vrn.sudrf.ru",
+      "address": "394036, г. Воронеж, ул. Комиссаржевской, д. 18А",
+      "email": "centralny.vrn@sudrf.ru",
+      "phones": {
+        "reception": "+7 (473) 235-67-45",
+        "fax": "+7 (473) 259-88-71",
+        "civil_chancery": "+7 (473) 235-62-46",
+        "criminal_chancery": "+7 (473) 235-63-89",
+        "archive": "+7 (473) 253-09-41"
+      },
+      "search_url": "https://centralny--vrn.sudrf.ru/modules.php?name=sud_delo",
+      "info_url": "https://centralny--vrn.sudrf.ru/modules.php?name=info_court"
+    },
+    {
+      "id": "lensud",
+      "name": "Ленинский районный суд г. Воронежа",
+      "district": "Ленинский",
+      "host": "https://lensud--vrn.sudrf.ru",
+      "site_alias": "http://lensud.vrn.sudrf.ru",
+      "address": "394006, г. Воронеж, ул. Краснознаменная, д. 2",
+      "email": "lensud.vrn@sudrf.ru",
+      "phones": {
+        "reception": "+7 (473) 277-57-55",
+        "civil_chancery": "+7 (473) 278-24-63",
+        "criminal_chancery": "+7 (473) 271-44-16",
+        "expedition": "+7 (473) 271-44-16",
+        "archive": "+7 (473) 271-66-02"
+      },
+      "search_url": "https://lensud--vrn.sudrf.ru/modules.php?name=sud_delo",
+      "info_url": "https://lensud--vrn.sudrf.ru/modules.php?name=info_court"
+    }
+  ]
+}
