@@ -1,0 +1,32 @@
+[
+  {
+    "slug": "sovetsky-vrn",
+    "name": "Советский районный суд г. Воронежа",
+    "url": "https://sovetsky--vrn.sudrf.ru/"
+  },
+  {
+    "slug": "kominternovsky-vrn",
+    "name": "Коминтерновский районный суд г. Воронежа",
+    "url": "https://kominternovsky--vrn.sudrf.ru/"
+  },
+  {
+    "slug": "zheleznodorozhny-vrn",
+    "name": "Железнодорожный районный суд г. Воронежа",
+    "url": "https://zheleznodorozhny--vrn.sudrf.ru/"
+  },
+  {
+    "slug": "levoberezhny-vrn",
+    "name": "Левобережный районный суд г. Воронежа",
+    "url": "https://levoberezhny--vrn.sudrf.ru/"
+  },
+  {
+    "slug": "centralny-vrn",
+    "name": "Центральный районный суд г. Воронежа",
+    "url": "https://centralny--vrn.sudrf.ru/"
+  },
+  {
+    "slug": "lensud-vrn",
+    "name": "Ленинский районный суд г. Воронежа",
+    "url": "https://lensud--vrn.sudrf.ru/"
+  }
+]
