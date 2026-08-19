@@ -1,0 +1,58 @@
+# Конфигурация судов, которые нужно обходить.
+# court_id используется как имя файла в data/ и как аргумент MCP-инструментов.
+#
+# ВНИМАНИЕ: все домены *.sudrf.ru блокируют запросы не из российских IP.
+# Краулер нужно запускать с российского VPS/прокси (см. README.md).
+
+courts:
+  - court_id: sovetsky
+    name: Советский районный суд г. Воронежа
+    base_url: https://sovetsky--vrn.sudrf.ru/
+    region: Воронежская область
+    city: Воронеж
+
+  - court_id: kominternovsky
+    name: Коминтерновский районный суд г. Воронежа
+    base_url: https://kominternovsky--vrn.sudrf.ru/
+    region: Воронежская область
+    city: Воронеж
+
+  - court_id: zheleznodorozhny
+    name: Железнодорожный районный суд г. Воронежа
+    base_url: https://zheleznodorozhny--vrn.sudrf.ru/
+    region: Воронежская область
+    city: Воронеж
+
+  - court_id: levoberezhny
+    name: Левобережный районный суд г. Воронежа
+    base_url: https://levoberezhny--vrn.sudrf.ru/
+    region: Воронежская область
+    city: Воронеж
+
+  - court_id: centralny
+    name: Центральный районный суд г. Воронежа
+    base_url: https://centralny--vrn.sudrf.ru/
+    region: Воронежская область
+    city: Воронеж
+
+  - court_id: lensud
+    name: Ленинский районный суд г. Воронежа
+    base_url: https://lensud--vrn.sudrf.ru/
+    region: Воронежская область
+    city: Воронеж
+
+crawl:
+  max_pages_per_court: 60
+  max_depth: 3
+  request_delay_seconds: 1.5
+  timeout_seconds: 20
+  user_agent: >-
+    Mozilla/5.0 (compatible; DendriitKB-Bot/1.0;
+    +contact: сообщите ваш контактный email/URL здесь)
+  respect_robots_txt: true
+  # Ссылки, содержащие любое из этих слов, обходим бережнее / отдельно —
+  # это модуль карточек дел с потенциальными персональными данными.
+  sensitive_path_markers:
+    - name=sud_delo
+    - case_id
+    - delo_id
