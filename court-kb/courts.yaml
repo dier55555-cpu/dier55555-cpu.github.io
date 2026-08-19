@@ -1,0 +1,28 @@
+# Список судов, чьи сайты нужно собирать в базу знаний ИИ-агента.
+# slug — короткий идентификатор суда, используется для имён файлов и в ответах инструмента.
+# name — человекочитаемое название (подставится в карточки знаний).
+# base_url — стартовая страница сайта.
+courts:
+  - slug: sovetsky-vrn
+    name: Советский районный суд г. Воронежа
+    base_url: https://sovetsky--vrn.sudrf.ru/
+
+  - slug: kominternovsky-vrn
+    name: Коминтерновский районный суд г. Воронежа
+    base_url: https://kominternovsky--vrn.sudrf.ru/
+
+  - slug: zheleznodorozhny-vrn
+    name: Железнодорожный районный суд г. Воронежа
+    base_url: https://zheleznodorozhny--vrn.sudrf.ru/
+
+  - slug: levoberezhny-vrn
+    name: Левобережный районный суд г. Воронежа
+    base_url: https://levoberezhny--vrn.sudrf.ru/
+
+  - slug: centralny-vrn
+    name: Центральный районный суд г. Воронежа
+    base_url: https://centralny--vrn.sudrf.ru/
+
+  - slug: lensud-vrn
+    name: Ленинский районный суд г. Воронежа
+    base_url: https://lensud--vrn.sudrf.ru/
