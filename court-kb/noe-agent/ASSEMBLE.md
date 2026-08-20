@@ -4,12 +4,18 @@
 
 ## После таблицы на Google Диске
 
-1. Файл для БЗ: `directory/courts-ru-bz.xlsx` (лист «Суды» — 2251 райсуд/облсуд; лист «Мировые» отдельно).
-2. Залить на Google Диск → открыть через Google Таблицы.
-3. Доступ: «всем, у кого есть ссылка — читатель» (или доступ аккаунту, с которого Ноя забирает таблицы, как у прайсов Легиона).
-4. Прислать URL вида `https://docs.google.com/spreadsheets/d/...`.
-5. Подключение в Ное: `POST /api/knowledge/documents/url` в коллекцию «Суды Воронежа» (переименуем в «Суды России»), `refresh_interval` как у таблиц Легиона.
-6. `search_prompt` коллекции — см. ниже. Промпт агента — целиком `prompt.md`. Короткие документы — `kb/01`…`04`. Шесть FAQ по райсудам Воронежа оставить: там часы и телефоны, которых нет в общей таблице.
+Таблицы уже подключены (20.08.2026):
+
+| Таблица | Google Sheets | Документ в Ное |
+| --- | --- | --- |
+| Суды России | https://docs.google.com/spreadsheets/d/19sxmrNDDHu0u-g4y3987g5hMMSdFh5VkKKmRRH-v2VU/edit?usp=sharing | коллекция `c36e77a3-bff0-4bd2-be6a-f85d52b418fc` |
+| Мировые суды России | https://docs.google.com/spreadsheets/d/109ThgsNtz_pyaLu0RZonEqh0oN1ntS5OCbJAfH_M6HQ/edit?usp=sharing | коллекция `cca3eb8d-2524-4db9-8e03-bd39f9216689` |
+
+Обе привязаны только к агенту «Ассистент - юриста». Легион не трогали.
+
+Ноя забирает CSV: `https://docs.google.com/spreadsheets/d/<ID>/export?format=csv` (как прайсы Легиона).
+
+Промпт агента — `prompt.md` (prompt_version 10). Короткие документы — `kb/01`…`04`. Шесть FAQ по райсудам Воронежа оставлены (часы и телефоны).
 
 ### search_prompt коллекции
 
