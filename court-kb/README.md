@@ -194,6 +194,7 @@ PY
 
 ```bash
 export COURT_KB_PROXY="http://user:pass@ru-proxy-host:port"   # обязателен для слоя 2 (и полезен для слоя 1)
+export COURT_KB_PROXY_PORTS="10001-10010"                      # опционально: пул sticky-портов одного gateway
 export TWOCAPTCHA_API_KEY="..."                                 # если на форме суда есть капча
 
 python -m mcp_server.server --corpus data/corpus.jsonl --courts-config courts.yaml
@@ -323,7 +324,8 @@ python -m scraper.case_lookup.discover \
 IP хостинга самой платформы НОЕ и её n8n. Резидентный прокси
 (`pool.proxy.market`) решает именно эту проблему — а нода **HTTP Request**
 в n8n умеет ходить через прокси напрямую (поле **Proxy** в Options,
-`http://user:pass@host:port`), без посредников.
+`http://user:pass@host:port`), без посредников. Один sticky-порт выгорает
+на sudrf — воркфлоу крутит пул портов `10001–10010` (каждый порт = свой IP).
 
 Второе опасение — что вся эвристика разбора формы/капчи/карточки дела
 слишком сложна для переноса в n8n Code-ноды. На практике для всех 6 судов

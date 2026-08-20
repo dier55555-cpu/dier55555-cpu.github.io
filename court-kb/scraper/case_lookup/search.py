@@ -41,6 +41,32 @@ Status = Literal[
     "unmapped_fields", "blocked", "error",
 ]
 
+# Stateless GET, как в n8n: без разбора <form>, без капчи.
+# Подтверждено discover 20.08.2026 на 6 райсудах Воронежа.
+SUDRF_PRODUCTION = {
+    "civil_first_instance": {
+        "delo_id": 1540005,
+        "table": "g1_case",
+        "case_number_field": "g1_case__CASE_NUMBERSS",
+        "last_name_field": "G1_PARTS__NAMESS",
+    },
+    "criminal_first_instance": {
+        "delo_id": 1540006,
+        "table": "u1_case",
+        "case_number_field": "u1_case__CASE_NUMBERSS",
+        "last_name_field": "U1_DEFENDANT__NAMESS",
+    },
+}
+
+VORONEZH_SUDRF_COURTS = {
+    "sovetsky-vrn": "sovetsky--vrn.sudrf.ru",
+    "kominternovsky-vrn": "kominternovsky--vrn.sudrf.ru",
+    "zheleznodorozhny-vrn": "zheleznodorozhny--vrn.sudrf.ru",
+    "levoberezhny-vrn": "levoberezhny--vrn.sudrf.ru",
+    "centralny-vrn": "centralny--vrn.sudrf.ru",
+    "lensud-vrn": "lensud--vrn.sudrf.ru",
+}
+
 
 @dataclass
 class CaseQuery:
@@ -114,6 +140,75 @@ def search_case(
         return _search_with_captcha(fetcher, form, params, query, captcha_solver, max_captcha_attempts)
 
     return _submit_and_parse(fetcher, form, params)
+
+
+def search_case_direct(
+    fetcher: Fetcher,
+    domain: str,
+    query: CaseQuery,
+    production_type: str = "civil_first_instance",
+) -> CaseSearchResult:
+    """Живой поиск как в n8n: один GET формы результатов + GET карточки.
+
+    Не разбирает <form> и не ходит в robots.txt — иначе не укладываемся в
+    таймаут шлюза ~30с. Имена полей G1/U1 зафиксированы discover 20.08.2026.
+    """
+    prod = SUDRF_PRODUCTION.get(production_type) or SUDRF_PRODUCTION["civil_first_instance"]
+    if not query.case_number and not query.last_name:
+        return CaseSearchResult("error", "Нужно указать case_number или last_name.")
+
+    params = {
+        "name": "sud_delo",
+        "srv_num": "1",
+        "name_op": "r",
+        "delo_id": str(prod["delo_id"]),
+        "case_type": "0",
+        "new": "0",
+        "delo_table": prod["table"],
+    }
+    if query.case_number:
+        params[prod["case_number_field"]] = query.case_number
+    if query.last_name:
+        params[prod["last_name_field"]] = query.last_name
+
+    search_url = f"https://{domain}/modules.php"
+    fetch_result = fetcher.request("GET", search_url, params=params, respect_robots=False)
+    if fetch_result.blocked:
+        return CaseSearchResult("blocked", (
+            "Сайт суда заблокировал запрос (нужен российский IP/прокси)."
+        ))
+    if not fetch_result.ok or not fetch_result.html:
+        return CaseSearchResult(
+            "error",
+            "Сайт суда временно недоступен через прокси (не ответил вовремя). "
+            "Попробуйте задать вопрос ещё раз.",
+        )
+
+    html = fetch_result.html
+    if looks_like_not_found(html):
+        return CaseSearchResult(
+            "not_found",
+            "По заданным критериям дел не найдено. Проверьте номер дела/фамилию "
+            "или обратитесь на сайт суда напрямую (раздел «Судебное делопроизводство»).",
+        )
+
+    hits = parse_search_hits(html, fetch_result.url or search_url)
+    if not hits:
+        return CaseSearchResult(
+            "error",
+            "Страница результатов получена, но структура не распознана "
+            "(сайт суда мог обновить вёрстку).",
+        )
+
+    cards = _hydrate_case_cards(fetcher, hits, limit=1, respect_robots=False)
+    if not cards:
+        return CaseSearchResult("not_found", "По заданным критериям дел не найдено.")
+    extra = max(0, len(hits) - 1)
+    if extra:
+        cards.append(CaseCard(sections={"ЕЩЁ РЕЗУЛЬТАТЫ": [
+            {"сообщение": f"Найдено ещё {extra} дел(а) по этим критериям — уточните номер дела, чтобы увидеть конкретное."}
+        ]}))
+    return CaseSearchResult("found", "Найдено", cases=cards)
 
 
 def _fill_params(form: SearchFormInfo, query: CaseQuery, field_overrides: dict) -> Optional[dict]:
@@ -190,7 +285,12 @@ def _submit_and_parse(fetcher: Fetcher, form: SearchFormInfo, params: dict) -> C
     return CaseSearchResult("found", "Найдено", cases=cards)
 
 
-def _hydrate_case_cards(fetcher: Fetcher, hits: list[CaseCard], limit: int = 3) -> list[CaseCard]:
+def _hydrate_case_cards(
+    fetcher: Fetcher,
+    hits: list[CaseCard],
+    limit: int = 3,
+    respect_robots: bool = True,
+) -> list[CaseCard]:
     """По одному-трём делам из выдачи подтягиваем полную карточку (движение/стороны)."""
     if not hits:
         return []
@@ -199,7 +299,7 @@ def _hydrate_case_cards(fetcher: Fetcher, hits: list[CaseCard], limit: int = 3) 
         if not hit.case_url:
             detailed.append(hit)
             continue
-        page = fetcher.get(hit.case_url)
+        page = fetcher.get(hit.case_url, respect_robots=respect_robots)
         if page.blocked or not page.ok or not page.html:
             detailed.append(hit)
             continue

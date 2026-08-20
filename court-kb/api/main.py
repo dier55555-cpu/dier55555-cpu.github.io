@@ -32,10 +32,45 @@ import yaml
 from fastapi import BackgroundTasks, FastAPI, Header, HTTPException
 from pydantic import BaseModel
 
-from mcp_server.server import _build_captcha_solver, _build_fetcher, _load_courts_config, load_corpus, score, _tokenize
-from scraper.case_lookup.search import CaseQuery, search_case
+from scraper.case_lookup.search import (
+    CaseQuery,
+    VORONEZH_SUDRF_COURTS,
+    search_case,
+    search_case_direct,
+)
 from scraper.crawl import crawl_court
 from scraper.directory.lookup import load_directory, lookup_courts
+from scraper.fetch import Fetcher
+
+
+def _load_courts_config(path: Path) -> dict:
+    if not path.exists():
+        return {}
+    data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    return {c["slug"]: c for c in data.get("courts", [])}
+
+
+def _build_fetcher() -> Fetcher:
+    from scraper.proxy_pool import proxies_from_env
+
+    proxy_urls = proxies_from_env()
+    return Fetcher(
+        proxy_urls=proxy_urls,
+        delay_range=(0.6, 1.2),
+        timeout=30,
+        max_retries=2,
+    )
+
+
+def _build_captcha_solver():
+    from scraper.case_lookup.captcha import ManualCaptchaSolver, TwoCaptchaSolver
+
+    api_key = os.environ.get("TWOCAPTCHA_API_KEY")
+    if api_key:
+        return TwoCaptchaSolver(api_key=api_key)
+    if os.environ.get("COURT_KB_MANUAL_CAPTCHA") == "1":
+        return ManualCaptchaSolver()
+    return None
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 CORPUS_PATH = Path(os.environ.get("COURT_KB_CORPUS", PROJECT_ROOT / "data" / "corpus.jsonl"))
@@ -155,6 +190,8 @@ def resolve_court(
 @app.get("/corpus/export")
 def corpus_export(x_api_key: Optional[str] = Header(default=None)) -> dict:
     """Выгрузка собранного корпуса (слой 1) для заливки в БЗ агента через n8n."""
+    from mcp_server.server import load_corpus
+
     _check_api_key(x_api_key)
     entries = load_corpus(CORPUS_PATH)
     return {
@@ -175,8 +212,9 @@ def corpus_export(x_api_key: Optional[str] = Header(default=None)) -> dict:
 @app.post("/kb/search", response_model=KbSearchResponse)
 def kb_search(payload: KbSearchRequest, x_api_key: Optional[str] = Header(default=None)) -> KbSearchResponse:
     """Слой 1: поиск ответа в заранее собранной базе знаний (data/corpus.jsonl)."""
-    _check_api_key(x_api_key)
+    from mcp_server.server import _tokenize, load_corpus, score
 
+    _check_api_key(x_api_key)
     entries = load_corpus(CORPUS_PATH)
     if not entries:
         return KbSearchResponse(result="База знаний пуста: запустите scraper.crawl с российского IP/прокси.")
@@ -234,6 +272,44 @@ def case_lookup(payload: CaseLookupRequest, x_api_key: Optional[str] = Header(de
         field_overrides=case_search_cfg.get("field_overrides"),
     )
     return CaseLookupResponse(status=result.status, result=result.as_text())
+
+
+@app.post("/delo", response_model=CaseLookupResponse)
+def delo_lookup(payload: CaseLookupRequest, x_api_key: Optional[str] = Header(default=None)) -> CaseLookupResponse:
+    """Быстрый слой 2 для вебхука Анны: stateless GET G1/U1 + карточка, пул прокси.
+
+    Тот же контракт, что у n8n `court-agent-yurist`: {status, result}.
+    """
+    _check_api_key(x_api_key)
+    domain = VORONEZH_SUDRF_COURTS.get(payload.court_slug)
+    if domain is None:
+        allowed = ", ".join(VORONEZH_SUDRF_COURTS)
+        return CaseLookupResponse(
+            status="error",
+            result=f"Неизвестный суд '{payload.court_slug}'. Допустимые: {allowed}.",
+        )
+    if not payload.case_number and not payload.last_name:
+        return CaseLookupResponse(status="error", result="Нужно указать case_number или last_name.")
+
+    from scraper.proxy_pool import proxies_from_env
+    import random
+
+    proxy_urls = proxies_from_env()
+    random.shuffle(proxy_urls)
+    fetcher = Fetcher(
+        proxy_urls=proxy_urls,
+        delay_range=(0.0, 0.0),
+        timeout=12.0,
+        max_retries=2,
+    )
+    result = search_case_direct(
+        fetcher,
+        domain,
+        CaseQuery(case_number=payload.case_number, last_name=payload.last_name),
+        production_type=payload.production_type,
+    )
+    text = result.as_text() if result.status == "found" else result.message
+    return CaseLookupResponse(status=result.status, result=text)
 
 
 def _run_full_crawl(max_pages: int, max_depth: int) -> None:

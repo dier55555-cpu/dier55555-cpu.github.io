@@ -12,24 +12,33 @@
       "name": "Webhook",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2,
-      "position": [0, 300],
+      "position": [
+        0,
+        300
+      ],
       "webhookId": "court-agent-yurist"
     },
     {
       "parameters": {
-        "jsCode": "// === НАСТРОЙКА ПОД НОВОГО КЛИЕНТА: поменять только эту строку ===\n// Резидентный прокси (proxy.market и т.п.) — единственное место во всём\n// воркфлоу, где он прописан. Обе HTTP Request-ноды ссылаются на него через\n// выражение ({{$json.proxy}} / {{$('Подготовить запрос').item.json.proxy}}),\n// поэтому смену прокси для другого клиента/сайта не нужно дублировать по нодам.\nconst PROXY_URL = 'http://nNzui4dOVx:zhbVdUF5ZF@pool.proxy.market:10000';\n\nconst COURTS = {\n  'sovetsky-vrn': 'sovetsky--vrn.sudrf.ru',\n  'kominternovsky-vrn': 'kominternovsky--vrn.sudrf.ru',\n  'zheleznodorozhny-vrn': 'zheleznodorozhny--vrn.sudrf.ru',\n  'levoberezhny-vrn': 'levoberezhny--vrn.sudrf.ru',\n  'centralny-vrn': 'centralny--vrn.sudrf.ru',\n  'lensud-vrn': 'lensud--vrn.sudrf.ru',\n};\n// Подтверждено scraper.case_lookup.discover 20.08.2026 на всех 6 сайтах через\n// резидентный прокси: имена полей формы одинаковы для всей платформы ГАС\n// «Правосудие» этой версии (delo_id 1540005/1540006, delo_table g1_case/u1_case).\nconst PRODUCTION = {\n  civil_first_instance: { delo_id: 1540005, table: 'g1_case', case_number_field: 'g1_case__CASE_NUMBERSS', last_name_field: 'G1_PARTS__NAMESS' },\n  criminal_first_instance: { delo_id: 1540006, table: 'u1_case', case_number_field: 'u1_case__CASE_NUMBERSS', last_name_field: 'U1_DEFENDANT__NAMESS' },\n};\n\nconst raw = $input.first().json;\nconst body = raw.body && typeof raw.body === 'object' ? raw.body : raw;\nconst court_slug = String(body.court_slug || '').trim();\nconst case_number = String(body.case_number || '').trim();\nconst last_name = String(body.last_name || '').trim();\nconst production_type = String(body.production_type || 'civil_first_instance').trim();\n\nif (!court_slug || !COURTS[court_slug]) {\n  return [{ json: { skipHttp: true, status: 'error', result: `Неизвестный суд '${court_slug}'. Допустимые: ${Object.keys(COURTS).join(', ')}.` } }];\n}\nif (!case_number && !last_name) {\n  return [{ json: { skipHttp: true, status: 'error', result: 'Нужно указать case_number или last_name.' } }];\n}\nconst prod = PRODUCTION[production_type] || PRODUCTION.civil_first_instance;\nconst domain = COURTS[court_slug];\n\nconst qs = {\n  name: 'sud_delo', srv_num: '1', name_op: 'r',\n  delo_id: String(prod.delo_id), case_type: '0', new: '0', delo_table: prod.table,\n};\nif (case_number) qs[prod.case_number_field] = case_number;\nif (last_name) qs[prod.last_name_field] = last_name;\n\nconst baseUrl = `https://${domain}/modules.php`;\nreturn [{ json: { skipHttp: false, searchUrl: baseUrl, baseUrl, qsJson: JSON.stringify(qs), proxy: PROXY_URL } }];"
+        "jsCode": "// === ПРОКСИ: один аккаунт, несколько sticky-портов ===\n// У proxy.market каждый порт pool.proxy.market:N — отдельный исходящий IP.\n// Порт 10000 20.08.2026 ловил CONNECT 503 только на *.sudrf.ru — в пул не берём.\n// На каждый вызов вебхука берём случайный порт и тем же URL идём и в поиск, и в карточку.\n// Повтор внутри одного вызова нельзя: шлюз Caddy ~30с, а мёртвый CONNECT часто висит 8–20с.\nconst PROXY_USER = 'nNzui4dOVx';\nconst PROXY_PASS = 'zhbVdUF5ZF';\nconst PROXY_HOST = 'pool.proxy.market';\nconst PROXY_PORTS = [10001, 10002, 10003, 10004, 10005, 10006, 10007, 10008, 10009, 10010];\n\nfunction pickProxyPort(requested) {\n  const n = Number(requested);\n  if (PROXY_PORTS.indexOf(n) !== -1) return n;\n  return PROXY_PORTS[Math.floor(Math.random() * PROXY_PORTS.length)];\n}\n\nconst COURTS = {\n  'sovetsky-vrn': 'sovetsky--vrn.sudrf.ru',\n  'kominternovsky-vrn': 'kominternovsky--vrn.sudrf.ru',\n  'zheleznodorozhny-vrn': 'zheleznodorozhny--vrn.sudrf.ru',\n  'levoberezhny-vrn': 'levoberezhny--vrn.sudrf.ru',\n  'centralny-vrn': 'centralny--vrn.sudrf.ru',\n  'lensud-vrn': 'lensud--vrn.sudrf.ru',\n};\n// Подтверждено scraper.case_lookup.discover 20.08.2026 на всех 6 сайтах через\n// резидентный прокси: имена полей формы одинаковы для всей платформы ГАС\n// «Правосудие» этой версии (delo_id 1540005/1540006, delo_table g1_case/u1_case).\nconst PRODUCTION = {\n  civil_first_instance: { delo_id: 1540005, table: 'g1_case', case_number_field: 'g1_case__CASE_NUMBERSS', last_name_field: 'G1_PARTS__NAMESS' },\n  criminal_first_instance: { delo_id: 1540006, table: 'u1_case', case_number_field: 'u1_case__CASE_NUMBERSS', last_name_field: 'U1_DEFENDANT__NAMESS' },\n};\n\nconst raw = $input.first().json;\nconst body = raw.body && typeof raw.body === 'object' ? raw.body : raw;\nconst court_slug = String(body.court_slug || '').trim();\nconst case_number = String(body.case_number || '').trim();\nconst last_name = String(body.last_name || '').trim();\nconst production_type = String(body.production_type || 'civil_first_instance').trim();\nconst proxyPort = pickProxyPort(body.proxy_port);\nconst proxy = 'http://' + PROXY_USER + ':' + PROXY_PASS + '@' + PROXY_HOST + ':' + proxyPort;\n\nif (!court_slug || !COURTS[court_slug]) {\n  return [{ json: { skipHttp: true, status: 'error', result: `Неизвестный суд '${court_slug}'. Допустимые: ${Object.keys(COURTS).join(', ')}.` } }];\n}\nif (!case_number && !last_name) {\n  return [{ json: { skipHttp: true, status: 'error', result: 'Нужно указать case_number или last_name.' } }];\n}\nconst prod = PRODUCTION[production_type] || PRODUCTION.civil_first_instance;\nconst domain = COURTS[court_slug];\n\nconst qs = {\n  name: 'sud_delo', srv_num: '1', name_op: 'r',\n  delo_id: String(prod.delo_id), case_type: '0', new: '0', delo_table: prod.table,\n};\nif (case_number) qs[prod.case_number_field] = case_number;\nif (last_name) qs[prod.last_name_field] = last_name;\n\nconst baseUrl = `https://${domain}/modules.php`;\nreturn [{ json: { skipHttp: false, searchUrl: baseUrl, baseUrl, qsJson: JSON.stringify(qs), proxy, proxyPort } }];\n"
       },
       "id": "build-query",
       "name": "Подготовить запрос",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [240, 300]
+      "position": [
+        240,
+        300
+      ]
     },
     {
       "parameters": {
         "conditions": {
           "boolean": [
-            { "value1": "={{$json.skipHttp}}", "value2": true }
+            {
+              "value1": "={{$json.skipHttp}}",
+              "value2": true
+            }
           ]
         }
       },
@@ -37,7 +46,10 @@
       "name": "Ошибка валидации?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 1,
-      "position": [480, 300]
+      "position": [
+        480,
+        300
+      ]
     },
     {
       "parameters": {
@@ -49,16 +61,31 @@
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
-            { "name": "User-Agent", "value": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36" },
-            { "name": "Accept", "value": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8" },
-            { "name": "Accept-Language", "value": "ru-RU,ru;q=0.9,en-US;q=0.8,en;q=0.7" },
-            { "name": "Connection", "value": "keep-alive" },
-            { "name": "Upgrade-Insecure-Requests", "value": "1" }
+            {
+              "name": "User-Agent",
+              "value": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+            },
+            {
+              "name": "Accept",
+              "value": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8"
+            },
+            {
+              "name": "Accept-Language",
+              "value": "ru-RU,ru;q=0.9,en-US;q=0.8,en;q=0.7"
+            },
+            {
+              "name": "Connection",
+              "value": "keep-alive"
+            },
+            {
+              "name": "Upgrade-Insecure-Requests",
+              "value": "1"
+            }
           ]
         },
         "options": {
           "proxy": "={{$json.proxy}}",
-          "timeout": 20000,
+          "timeout": 16000,
           "response": {
             "response": {
               "responseFormat": "text",
@@ -71,7 +98,10 @@
       "name": "Поиск дела (через прокси)",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [720, 180]
+      "position": [
+        720,
+        180
+      ]
     },
     {
       "parameters": {
@@ -81,13 +111,19 @@
       "name": "Разобрать результаты поиска",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [960, 180]
+      "position": [
+        960,
+        180
+      ]
     },
     {
       "parameters": {
         "conditions": {
           "boolean": [
-            { "value1": "={{$json.needsDetail}}", "value2": true }
+            {
+              "value1": "={{$json.needsDetail}}",
+              "value2": true
+            }
           ]
         }
       },
@@ -95,7 +131,10 @@
       "name": "Есть совпадение?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 1,
-      "position": [1200, 180]
+      "position": [
+        1200,
+        180
+      ]
     },
     {
       "parameters": {
@@ -104,16 +143,31 @@
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
-            { "name": "User-Agent", "value": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36" },
-            { "name": "Accept", "value": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8" },
-            { "name": "Accept-Language", "value": "ru-RU,ru;q=0.9,en-US;q=0.8,en;q=0.7" },
-            { "name": "Connection", "value": "keep-alive" },
-            { "name": "Upgrade-Insecure-Requests", "value": "1" }
+            {
+              "name": "User-Agent",
+              "value": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+            },
+            {
+              "name": "Accept",
+              "value": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8"
+            },
+            {
+              "name": "Accept-Language",
+              "value": "ru-RU,ru;q=0.9,en-US;q=0.8,en;q=0.7"
+            },
+            {
+              "name": "Connection",
+              "value": "keep-alive"
+            },
+            {
+              "name": "Upgrade-Insecure-Requests",
+              "value": "1"
+            }
           ]
         },
         "options": {
           "proxy": "={{$('Подготовить запрос').item.json.proxy}}",
-          "timeout": 8000,
+          "timeout": 10000,
           "response": {
             "response": {
               "responseFormat": "text",
@@ -126,7 +180,10 @@
       "name": "Карточка дела (через прокси)",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1440, 100]
+      "position": [
+        1440,
+        100
+      ]
     },
     {
       "parameters": {
@@ -136,7 +193,10 @@
       "name": "Собрать карточку дела",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [1680, 100]
+      "position": [
+        1680,
+        100
+      ]
     },
     {
       "parameters": {
@@ -148,7 +208,10 @@
       "name": "Ответ (карточка дела)",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.1,
-      "position": [1920, 100]
+      "position": [
+        1920,
+        100
+      ]
     },
     {
       "parameters": {
@@ -160,7 +223,10 @@
       "name": "Ответ (не найдено / ошибка)",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.1,
-      "position": [1440, 300]
+      "position": [
+        1440,
+        300
+      ]
     },
     {
       "parameters": {
@@ -172,42 +238,118 @@
       "name": "Ответ (ошибка валидации)",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.1,
-      "position": [720, 420]
+      "position": [
+        720,
+        420
+      ]
     }
   ],
   "connections": {
     "Webhook": {
-      "main": [[{ "node": "Подготовить запрос", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Подготовить запрос",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Подготовить запрос": {
-      "main": [[{ "node": "Ошибка валидации?", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Ошибка валидации?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Ошибка валидации?": {
       "main": [
-        [{ "node": "Ответ (ошибка валидации)", "type": "main", "index": 0 }],
-        [{ "node": "Поиск дела (через прокси)", "type": "main", "index": 0 }]
+        [
+          {
+            "node": "Ответ (ошибка валидации)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Поиск дела (через прокси)",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
     "Поиск дела (через прокси)": {
-      "main": [[{ "node": "Разобрать результаты поиска", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Разобрать результаты поиска",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Разобрать результаты поиска": {
-      "main": [[{ "node": "Есть совпадение?", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Есть совпадение?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Есть совпадение?": {
       "main": [
-        [{ "node": "Карточка дела (через прокси)", "type": "main", "index": 0 }],
-        [{ "node": "Ответ (не найдено / ошибка)", "type": "main", "index": 0 }]
+        [
+          {
+            "node": "Карточка дела (через прокси)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Ответ (не найдено / ошибка)",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
     "Карточка дела (через прокси)": {
-      "main": [[{ "node": "Собрать карточку дела", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Собрать карточку дела",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Собрать карточку дела": {
-      "main": [[{ "node": "Ответ (карточка дела)", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Ответ (карточка дела)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     }
   },
   "settings": {
-    "executionOrder": "v1"
+    "executionOrder": "v1",
+    "availableInMCP": true
   }
 }

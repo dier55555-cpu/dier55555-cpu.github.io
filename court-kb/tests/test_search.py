@@ -1,5 +1,5 @@
 from scraper.case_lookup.captcha import CaptchaSolver
-from scraper.case_lookup.search import CaseQuery, search_case
+from scraper.case_lookup.search import CaseQuery, search_case, search_case_direct
 from scraper.fetch import FetchResult
 
 FORM_URL = "https://example--vrn.sudrf.ru/modules.php?name=sud_delo&name_op=sf&delo_id=1540005&srv_num=1"
@@ -41,7 +41,7 @@ class FakeFetcher:
         self.submit_responses = list(submit_responses)
         self.submitted_params = []
 
-    def get(self, url):
+    def get(self, url, respect_robots=True):
         return FetchResult(url, ok=True, blocked=False, status_code=200, html=self.form_html)
 
     def get_bytes(self, url):
@@ -51,7 +51,7 @@ class FakeFetcher:
         self.submitted_params.append(data)
         return self.submit_responses.pop(0)
 
-    def request(self, method, url, params=None, data=None):
+    def request(self, method, url, params=None, data=None, **kwargs):
         payload = params if params is not None else data
         self.submitted_params.append(payload)
         return self.submit_responses.pop(0)
@@ -186,7 +186,7 @@ RESULT_HTML_LIST_PAGE = """
 
 
 class HydratingFetcher(FakeFetcher):
-    def get(self, url):
+    def get(self, url, respect_robots=True):
         if "name_op=case" in url:
             return _ok(RESULT_HTML_FOUND)
         return super().get(url)
@@ -211,6 +211,41 @@ def test_search_case_voronezh_not_found_wording():
         fetcher, "https://sovetsky--vrn.sudrf.ru/", 1540005,
         CaseQuery(case_number="2-99999/2099"),
         captcha_solver=None,
+    )
+    assert result.status == "not_found"
+
+
+def test_search_case_direct_found_and_hydrates():
+    class DirectFetcher(FakeFetcher):
+        def request(self, method, url, params=None, data=None, **kwargs):
+            assert params["g1_case__CASE_NUMBERSS"] == "2-10/2026"
+            return _ok(RESULT_HTML_LIST_PAGE)
+
+        def get(self, url, respect_robots=True):
+            assert respect_robots is False
+            return _ok(RESULT_HTML_FOUND)
+
+    result = search_case_direct(
+        DirectFetcher("", []),
+        "sovetsky--vrn.sudrf.ru",
+        CaseQuery(case_number="2-10/2026"),
+    )
+    assert result.status == "found"
+    assert "2-10/2026" in result.as_text()
+    assert "Иванов" in result.as_text() or "Судья" in result.as_text()
+
+
+def test_search_case_direct_not_found():
+    html = "<html><body><p>Данных по запросу не обнаружено.</p></body></html>"
+
+    class DirectFetcher(FakeFetcher):
+        def request(self, method, url, params=None, data=None, **kwargs):
+            return _ok(html)
+
+    result = search_case_direct(
+        DirectFetcher("", []),
+        "sovetsky--vrn.sudrf.ru",
+        CaseQuery(case_number="2-99999/2099"),
     )
     assert result.status == "not_found"
 

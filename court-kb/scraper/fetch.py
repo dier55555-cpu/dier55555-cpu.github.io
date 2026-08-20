@@ -20,6 +20,8 @@ from urllib.parse import urljoin, urlparse
 
 import requests
 
+from .proxy_pool import is_proxy_failure, parse_proxy_list
+
 _META_CHARSET_RE = re.compile(rb'charset=["\']?([a-zA-Z0-9_-]+)', re.IGNORECASE)
 
 
@@ -86,16 +88,40 @@ class Fetcher:
 
     proxies: например {"https": "http://user:pass@ru-proxy-host:port"} —
     сюда передаётся российский прокси/VPS, без него сайты недоступны.
+    proxy_urls: несколько URL (разные sticky-порты/аккаунты). При 503/таймауте
+    туннеля переключаемся на следующий, не долбя один и тот же IP.
     delay_range: пауза между запросами (сек), чтобы не грузить гос. сайт.
     """
 
     proxies: Optional[dict] = None
+    proxy_urls: list[str] = field(default_factory=list)
     delay_range: tuple[float, float] = (2.0, 5.0)
     timeout: float = 20.0
     max_retries: int = 3
     user_agent: str = DEFAULT_USER_AGENT
     session: requests.Session = field(default_factory=requests.Session)
     _robots_cache: dict = field(default_factory=dict)
+    _proxy_index: int = 0
+
+    def __post_init__(self) -> None:
+        if not self.proxy_urls and self.proxies:
+            raw = self.proxies.get("https") or self.proxies.get("http") or ""
+            urls = parse_proxy_list(raw)
+            if urls:
+                self.proxy_urls = urls
+        if self.proxy_urls:
+            self.proxies = self._current_proxies()
+
+    def _current_proxies(self) -> Optional[dict]:
+        if not self.proxy_urls:
+            return self.proxies
+        url = self.proxy_urls[self._proxy_index % len(self.proxy_urls)]
+        return {"http": url, "https": url}
+
+    def _rotate_proxy(self) -> None:
+        if len(self.proxy_urls) > 1:
+            self._proxy_index = (self._proxy_index + 1) % len(self.proxy_urls)
+            self.proxies = self._current_proxies()
 
     def _sleep(self) -> None:
         time.sleep(random.uniform(*self.delay_range))
@@ -111,7 +137,7 @@ class Fetcher:
                 resp = self.session.get(
                     robots_url,
                     headers={"User-Agent": self.user_agent, **BROWSER_LIKE_HEADERS},
-                    proxies=self.proxies,
+                    proxies=self._current_proxies(),
                     timeout=self.timeout,
                 )
                 robots_text = _decode_body(resp.content, resp.encoding)
@@ -143,7 +169,8 @@ class Fetcher:
                                 html=None, error="disallowed by robots.txt")
 
         last_error = None
-        for attempt in range(1, self.max_retries + 1):
+        attempts = max(1, self.max_retries)
+        for attempt in range(1, attempts + 1):
             try:
                 resp = self.session.request(
                     method,
@@ -151,11 +178,14 @@ class Fetcher:
                     params=params,
                     data=data,
                     headers={"User-Agent": self.user_agent, **BROWSER_LIKE_HEADERS},
-                    proxies=self.proxies,
+                    proxies=self._current_proxies(),
                     timeout=self.timeout,
                 )
             except requests.RequestException as exc:
                 last_error = str(exc)
+                if is_proxy_failure(last_error) and attempt < attempts and self.proxy_urls:
+                    self._rotate_proxy()
+                    continue
                 network_block_markers = (
                     "Connection reset by peer",
                     "RemoteDisconnected",
@@ -177,11 +207,15 @@ class Fetcher:
             html = _decode_body(resp.content, resp.encoding)
 
             if self._looks_blocked(html):
+                if attempt < attempts and self.proxy_urls:
+                    self._rotate_proxy()
+                    continue
                 return FetchResult(url, ok=False, blocked=True, status_code=resp.status_code,
                                     html=html, error="WAF block page (geo/IP)")
 
-            if resp.status_code >= 500 and attempt < self.max_retries:
+            if resp.status_code >= 500 and attempt < attempts:
                 last_error = f"HTTP {resp.status_code}"
+                self._rotate_proxy()
                 self._sleep()
                 continue
 
@@ -198,7 +232,7 @@ class Fetcher:
             resp = self.session.get(
                 url,
                 headers={"User-Agent": self.user_agent, **BROWSER_LIKE_HEADERS},
-                proxies=self.proxies,
+                proxies=self._current_proxies(),
                 timeout=self.timeout,
             )
         except requests.RequestException:

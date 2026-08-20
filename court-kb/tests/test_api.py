@@ -47,7 +47,18 @@ def test_list_courts_case_search_enabled():
     assert all(c["case_search_enabled"] for c in response.json()["courts"])
 
 
-def test_case_lookup_unknown_court_is_404():
+def test_delo_unknown_court_is_error_json():
+    response = client.post("/delo", json={"court_slug": "does-not-exist", "case_number": "1"})
+    assert response.status_code == 200
+    body = response.json()
+    assert body["status"] == "error"
+    assert "Неизвестный суд" in body["result"]
+
+
+def test_delo_requires_case_number_or_last_name():
+    response = client.post("/delo", json={"court_slug": "sovetsky-vrn"})
+    assert response.status_code == 200
+    assert "case_number" in response.json()["result"]
     response = client.post("/case-lookup", json={"court_slug": "does-not-exist", "case_number": "1"})
     assert response.status_code == 404
 
