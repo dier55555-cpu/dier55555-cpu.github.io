@@ -86,7 +86,7 @@ def _load_courts_config(path: Path) -> dict:
 def _build_fetcher() -> Fetcher:
     proxy = os.environ.get("COURT_KB_PROXY")
     proxies = {"http": proxy, "https": proxy} if proxy else None
-    return Fetcher(proxies=proxies)
+    return Fetcher(proxies=proxies, delay_range=(0.6, 1.2), timeout=30, max_retries=2)
 
 
 def _build_captcha_solver():

@@ -51,6 +51,42 @@ def test_not_found_detection():
     assert not looks_like_not_found(RESULT_HTML_ONE_CASE)
 
 
+def test_not_found_voronezh_wording():
+    html = "<html><body><p>Данных по запросу не обнаружено.</p><p>Уточните критерии поиска.</p></body></html>"
+    assert looks_like_not_found(html)
+
+
+RESULT_HTML_LIST = """
+<html><body>
+<div id="content">
+<p>Всего по запросу найдено — 1.</p>
+<table id="tablcont">
+<tr><th>№ дела</th><th>Дата поступления</th><th>Судья</th></tr>
+<tr>
+  <td><a href="/modules.php?name=sud_delo&name_op=case&case_id=1">2-10/2026</a></td>
+  <td>01.02.2026</td>
+  <td>Петров П.П.</td>
+</tr>
+</table>
+</div>
+</body></html>
+"""
+
+
+def test_parses_search_hit_table():
+    from scraper.case_lookup.case_card import parse_search_hits
+    cards = parse_search_hits(RESULT_HTML_LIST, "https://example--vrn.sudrf.ru/modules.php")
+    assert len(cards) == 1
+    assert cards[0].case_number == "2-10/2026"
+    assert "name_op=case" in (cards[0].case_url or "")
+    assert {"Судья": "Петров П.П."} in cards[0].sections["РЕЗУЛЬТАТ ПОИСКА"]
+
+
+def test_not_found_voronezh_wording():
+    html = "<html><body><p>Данных по запросу не обнаружено.</p><p>Уточните критерии поиска.</p></body></html>"
+    assert looks_like_not_found(html)
+
+
 def test_wrong_captcha_detection():
     assert looks_like_wrong_captcha(RESULT_HTML_WRONG_CAPTCHA)
     assert not looks_like_wrong_captcha(RESULT_HTML_ONE_CASE)

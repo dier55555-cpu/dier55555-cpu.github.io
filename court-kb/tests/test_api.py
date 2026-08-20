@@ -41,24 +41,37 @@ def test_kb_search_on_empty_corpus_returns_clear_message():
     assert "База знаний пуста" in response.json()["result"]
 
 
+def test_list_courts_case_search_enabled():
+    response = client.get("/courts")
+    assert response.status_code == 200
+    assert all(c["case_search_enabled"] for c in response.json()["courts"])
+
+
 def test_case_lookup_unknown_court_is_404():
     response = client.post("/case-lookup", json={"court_slug": "does-not-exist", "case_number": "1"})
     assert response.status_code == 404
 
 
-def test_case_lookup_disabled_court_returns_clear_status():
-    response = client.post("/case-lookup", json={"court_slug": "sovetsky-vrn", "case_number": "2-1/2026"})
-    assert response.status_code == 200
-    body = response.json()
-    assert body["status"] == "disabled"
-
-
 def test_case_lookup_requires_case_number_or_last_name():
     response = client.post("/case-lookup", json={"court_slug": "sovetsky-vrn"})
-    # court_search отключён для всех судов по умолчанию, поэтому проверка "нужен
-    # case_number/last_name" здесь не достигается — но disabled-ответ уже
-    # покрыт test_case_lookup_disabled_court_returns_clear_status.
+    assert response.status_code == 400
+
+
+def test_case_lookup_returns_search_status(monkeypatch):
+    from scraper.case_lookup.search import CaseSearchResult
+
+    def fake_search(*args, **kwargs):
+        return CaseSearchResult("not_found", "По заданным критериям дел не найдено.")
+
+    monkeypatch.setattr("api.main.search_case", fake_search)
+    response = client.post(
+        "/case-lookup",
+        json={"court_slug": "sovetsky-vrn", "case_number": "2-1/2026"},
+    )
     assert response.status_code == 200
+    body = response.json()
+    assert body["status"] == "not_found"
+    assert "не найдено" in body["result"]
 
 
 def test_api_key_check_rejects_wrong_key(monkeypatch):

@@ -8,8 +8,9 @@
 # гражданские первой инстанции, 1540006 — уголовные первой инстанции)
 # подтверждены на других сайтах ГАС «Правосудие» (СПб, Башкортостан) и, судя
 # по всему, одинаковы для всей платформы, но для ЭТИХ 6 судов Воронежа их
-# нужно проверить через `scraper.case_lookup.discover` с российского IP,
-# прежде чем включать `enabled: true`.
+# case_search.enabled: true после проверки формы sud_delo на 6 судах Воронежа
+# (вторая <form> на странице — поиск по номеру/фамилии, без капчи; первая — список
+# заседаний на дату). Коды 1540005/1540006 подтверждены на этих сайтах.
 # field_overrides — заполняется по итогам discover.py, если автоматическое
 # сопоставление подписи->имя поля не сработало для конкретного суда.
 courts:
@@ -17,7 +18,7 @@ courts:
     name: Советский районный суд г. Воронежа
     base_url: https://sovetsky--vrn.sudrf.ru/
     case_search:
-      enabled: false  # включить после проверки discover.py с RU IP
+      enabled: true
       production_types:
         civil_first_instance: 1540005
         criminal_first_instance: 1540006
@@ -27,7 +28,7 @@ courts:
     name: Коминтерновский районный суд г. Воронежа
     base_url: https://kominternovsky--vrn.sudrf.ru/
     case_search:
-      enabled: false
+      enabled: true
       production_types:
         civil_first_instance: 1540005
         criminal_first_instance: 1540006
@@ -37,7 +38,7 @@ courts:
     name: Железнодорожный районный суд г. Воронежа
     base_url: https://zheleznodorozhny--vrn.sudrf.ru/
     case_search:
-      enabled: false
+      enabled: true
       production_types:
         civil_first_instance: 1540005
         criminal_first_instance: 1540006
@@ -47,7 +48,7 @@ courts:
     name: Левобережный районный суд г. Воронежа
     base_url: https://levoberezhny--vrn.sudrf.ru/
     case_search:
-      enabled: false
+      enabled: true
       production_types:
         civil_first_instance: 1540005
         criminal_first_instance: 1540006
@@ -57,7 +58,7 @@ courts:
     name: Центральный районный суд г. Воронежа
     base_url: https://centralny--vrn.sudrf.ru/
     case_search:
-      enabled: false
+      enabled: true
       production_types:
         civil_first_instance: 1540005
         criminal_first_instance: 1540006
@@ -67,7 +68,7 @@ courts:
     name: Ленинский районный суд г. Воронежа
     base_url: https://lensud--vrn.sudrf.ru/
     case_search:
-      enabled: false
+      enabled: true
       production_types:
         civil_first_instance: 1540005
         criminal_first_instance: 1540006

@@ -52,7 +52,8 @@ class FakeFetcher:
         return self.submit_responses.pop(0)
 
     def request(self, method, url, params=None, data=None):
-        self.submitted_params.append(params)
+        payload = params if params is not None else data
+        self.submitted_params.append(payload)
         return self.submit_responses.pop(0)
 
 
@@ -126,3 +127,90 @@ def test_search_case_without_solver_reports_captcha_required():
 
     assert result.status == "captcha_required"
     assert result.captcha_image_url == "https://example--vrn.sudrf.ru/captcha.php?id=42"
+
+
+VORONEZH_TWO_FORMS_HTML = """
+<html><body>
+<form method="get" action="/modules.php">
+<input type="hidden" name="name" value="sud_delo">
+<input type="text" name="H_date" value="20.08.2026">
+</form>
+<form method="get" action="">
+<input type="hidden" name="name" value="sud_delo">
+<input type="hidden" name="srv_num" value="1">
+<input type="hidden" name="name_op" value="r">
+<input type="hidden" name="delo_id" value="1540005">
+<input type="hidden" name="case_type" value="0">
+<input type="hidden" name="new" value="0">
+<input type="hidden" name="delo_table" value="g1_case">
+<table>
+<tr><td>Фамилия</td><td><input type="text" name="G1_PARTS__NAMESS"></td></tr>
+<tr><td>Номер дела (материала)</td><td><input type="text" name="g1_case__CASE_NUMBERSS"></td></tr>
+</table>
+</form>
+</body></html>
+"""
+
+
+def test_search_case_picks_second_form_and_works_without_captcha():
+    fetcher = FakeFetcher(VORONEZH_TWO_FORMS_HTML, [_ok(RESULT_HTML_FOUND)])
+
+    result = search_case(
+        fetcher, "https://sovetsky--vrn.sudrf.ru/", 1540005,
+        CaseQuery(case_number="2-123/2026"),
+        captcha_solver=None,
+    )
+
+    assert result.status == "found"
+    submitted = fetcher.submitted_params[0]
+    assert submitted["g1_case__CASE_NUMBERSS"] == "2-123/2026"
+    assert submitted["name_op"] == "r"
+    assert submitted["delo_id"] == "1540005"
+    assert "H_date" not in submitted
+
+
+RESULT_HTML_LIST_PAGE = """
+<html><body>
+<div id="content">
+<p>Всего по запросу найдено — 1.</p>
+<table id="tablcont">
+<tr><th>№ дела</th><th>Судья</th></tr>
+<tr>
+  <td><a href="/modules.php?name=sud_delo&name_op=case&case_id=9">2-10/2026</a></td>
+  <td>Сидоров С.С.</td>
+</tr>
+</table>
+</div>
+</body></html>
+"""
+
+
+class HydratingFetcher(FakeFetcher):
+    def get(self, url):
+        if "name_op=case" in url:
+            return _ok(RESULT_HTML_FOUND)
+        return super().get(url)
+
+
+def test_search_case_hydrates_list_hit_into_case_card():
+    fetcher = HydratingFetcher(VORONEZH_TWO_FORMS_HTML, [_ok(RESULT_HTML_LIST_PAGE)])
+    result = search_case(
+        fetcher, "https://sovetsky--vrn.sudrf.ru/", 1540005,
+        CaseQuery(case_number="2-10/2026"),
+        captcha_solver=None,
+    )
+    assert result.status == "found"
+    assert result.cases[0].case_number == "2-10/2026"
+    assert "Судья" in result.as_text() or "Иванов" in result.as_text()
+
+
+def test_search_case_voronezh_not_found_wording():
+    html = "<html><body><p>Данных по запросу не обнаружено.</p><p>Уточните критерии поиска.</p></body></html>"
+    fetcher = FakeFetcher(VORONEZH_TWO_FORMS_HTML, [_ok(html)])
+    result = search_case(
+        fetcher, "https://sovetsky--vrn.sudrf.ru/", 1540005,
+        CaseQuery(case_number="2-99999/2099"),
+        captcha_solver=None,
+    )
+    assert result.status == "not_found"
+

@@ -33,7 +33,7 @@ from urllib.parse import urljoin
 
 from ..fetch import Fetcher
 from .captcha import CaptchaSolver
-from .case_card import CaseCard, format_case_card, looks_like_not_found, looks_like_wrong_captcha, parse_case_cards
+from .case_card import CaseCard, format_case_card, looks_like_not_found, looks_like_wrong_captcha, parse_case_cards, parse_search_hits
 from .forms import SearchFormInfo, parse_search_form
 
 Status = Literal[
@@ -178,9 +178,42 @@ def _submit_and_parse(fetcher: Fetcher, form: SearchFormInfo, params: dict) -> C
 
     cards = parse_case_cards(html)
     if not cards:
+        cards = parse_search_hits(html, fetch_result.url or form.action_url)
+        cards = _hydrate_case_cards(fetcher, cards)
+
+    if not cards:
         return CaseSearchResult(
             "error",
             "Страница результатов получена, но структура карточки дела не распознана "
             "(вероятно, у этого суда другая вёрстка — доработайте case_card.py под неё).",
         )
     return CaseSearchResult("found", "Найдено", cases=cards)
+
+
+def _hydrate_case_cards(fetcher: Fetcher, hits: list[CaseCard], limit: int = 3) -> list[CaseCard]:
+    """По одному-трём делам из выдачи подтягиваем полную карточку (движение/стороны)."""
+    if not hits:
+        return []
+    detailed: list[CaseCard] = []
+    for hit in hits[:limit]:
+        if not hit.case_url:
+            detailed.append(hit)
+            continue
+        page = fetcher.get(hit.case_url)
+        if page.blocked or not page.ok or not page.html:
+            detailed.append(hit)
+            continue
+        cards = parse_case_cards(page.html)
+        if not cards:
+            detailed.append(hit)
+            continue
+        card = cards[0]
+        card.case_url = hit.case_url
+        card.case_number = hit.case_number or card.case_number
+        detailed.append(card)
+    if len(hits) > limit:
+        extra = CaseCard(sections={"ЕЩЁ РЕЗУЛЬТАТЫ": [
+            {"сообщение": f"Показаны первые {limit} из {len(hits)}. Уточните номер дела."}
+        ]})
+        detailed.append(extra)
+    return detailed

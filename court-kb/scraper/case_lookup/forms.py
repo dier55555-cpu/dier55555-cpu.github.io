@@ -15,7 +15,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from typing import Optional
-from urllib.parse import urljoin
+from urllib.parse import urljoin, urlparse
 
 from bs4 import BeautifulSoup
 
@@ -94,18 +94,30 @@ def _row_label(tag) -> str:
     return " ".join(texts)
 
 
-def parse_search_form(html: str, page_url: str) -> SearchFormInfo:
-    soup = BeautifulSoup(html, "html.parser")
-    form = soup.find("form")
-    if form is None:
-        raise ValueError("На странице не найдена <form> — вероятно, это не форма поиска дела")
+def _map_field_name(name: str) -> Optional[str]:
+    """Запасное сопоставление по name-атрибуту ГАС «Правосудие» (G1_/U1_/A1_…)."""
+    lowered = name.lower()
+    if "case_numberss" in lowered:
+        return "case_number"
+    if "judicial_uidss" in lowered:
+        return "case_uid"
+    if "parts__namess" in lowered or "defendant__namess" in lowered:
+        return "last_name"
+    return None
 
-    action = form.get("action") or page_url
-    action_url = urljoin(page_url, action)
+
+def _parse_one_form(form, page_url: str) -> SearchFormInfo:
+    action = (form.get("action") or "").strip()
+    if action:
+        action_url = urljoin(page_url, action)
+    else:
+        parsed = urlparse(page_url)
+        action_url = f"{parsed.scheme}://{parsed.netloc}{parsed.path}"
     method = (form.get("method") or "GET").upper()
 
     fields: list[FormField] = []
     captcha: Optional[CaptchaInfo] = None
+    skip_types = ("hidden", "submit", "button", "reset", "image")
 
     for tag in form.find_all(["input", "select", "textarea"]):
         name = tag.get("name")
@@ -115,7 +127,9 @@ def parse_search_form(html: str, page_url: str) -> SearchFormInfo:
         input_type = tag.get("type", "text") if tag_name == "input" else None
         value = tag.get("value")
         label = _row_label(tag)
-        mapped_key = _match_label(label) if input_type not in ("hidden", "submit", "button") else None
+        mapped_key = None
+        if input_type not in skip_types:
+            mapped_key = _match_label(label) or _map_field_name(name)
 
         fields.append(FormField(
             name=name, tag=tag_name, input_type=input_type,
@@ -129,3 +143,16 @@ def parse_search_form(html: str, page_url: str) -> SearchFormInfo:
                 captcha = CaptchaInfo(field_name=name, image_url=urljoin(page_url, img["src"]))
 
     return SearchFormInfo(action_url=action_url, method=method, fields=fields, captcha=captcha)
+
+
+def parse_search_form(html: str, page_url: str) -> SearchFormInfo:
+    soup = BeautifulSoup(html, "html.parser")
+    forms = soup.find_all("form")
+    if not forms:
+        raise ValueError("На странице не найдена <form> — вероятно, это не форма поиска дела")
+
+    parsed = [_parse_one_form(form, page_url) for form in forms]
+    for info in parsed:
+        if info.field_by_key("case_number") or info.field_by_key("last_name"):
+            return info
+    return parsed[0]
