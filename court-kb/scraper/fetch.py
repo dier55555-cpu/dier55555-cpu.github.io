@@ -142,9 +142,19 @@ class Fetcher:
                 )
             except requests.RequestException as exc:
                 last_error = str(exc)
-                if "Connection reset by peer" in last_error or "RemoteDisconnected" in last_error:
-                    # Похоже на блокировку на уровне TCP/сети (тот же WAF, но без
-                    # HTML-страницы с объяснением) — тоже требует российского IP.
+                network_block_markers = (
+                    "Connection reset by peer",
+                    "RemoteDisconnected",
+                    "ConnectTimeoutError",
+                    "Connection to",  # requests' "Connection to <host> timed out" message
+                )
+                if isinstance(exc, (requests.exceptions.ConnectTimeout, requests.exceptions.ConnectionError)) and any(
+                    marker in last_error for marker in network_block_markers
+                ):
+                    # Похоже на блокировку на уровне TCP/сети (SYN просто не долетает,
+                    # либо соединение рвётся) — тот же эффект, что и HTML-страница с
+                    # объяснением, но без неё. Подтверждено даже с российских
+                    # хостинг-провайдеров (не только с иностранных IP) — см. README.
                     return FetchResult(url, ok=False, blocked=True, status_code=None,
                                         html=None, error=f"network-level block? ({last_error})")
                 self._sleep()
