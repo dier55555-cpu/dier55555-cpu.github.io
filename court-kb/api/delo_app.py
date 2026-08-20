@@ -6,9 +6,12 @@
 
 from __future__ import annotations
 
+import logging
 import os
 import random
+import time
 from typing import Optional
+from urllib.parse import urlparse
 
 from fastapi import FastAPI, Header, HTTPException
 from pydantic import BaseModel
@@ -18,6 +21,26 @@ from scraper.fetch import Fetcher
 from scraper.proxy_pool import proxies_from_env
 
 app = FastAPI(title="court-kb delo", version="1.0.0")
+log = logging.getLogger("delo")
+logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
+
+_last_good_proxy: Optional[str] = None
+
+
+def _ordered_proxies() -> list[str]:
+    urls = proxies_from_env()
+    random.shuffle(urls)
+    if _last_good_proxy and _last_good_proxy in urls:
+        urls.remove(_last_good_proxy)
+        urls.insert(0, _last_good_proxy)
+    return urls
+
+
+def _proxy_port(url: str) -> str:
+    try:
+        return str(urlparse(url).port or "?")
+    except Exception:
+        return "?"
 
 
 def _check_api_key(x_api_key: Optional[str]) -> None:
@@ -47,6 +70,7 @@ def health() -> dict:
 
 @app.post("/delo", response_model=CaseLookupResponse)
 def delo_lookup(payload: CaseLookupRequest, x_api_key: Optional[str] = Header(default=None)) -> CaseLookupResponse:
+    global _last_good_proxy
     _check_api_key(x_api_key)
     domain = VORONEZH_SUDRF_COURTS.get(payload.court_slug)
     if domain is None:
@@ -60,19 +84,33 @@ def delo_lookup(payload: CaseLookupRequest, x_api_key: Optional[str] = Header(de
     if not case_number and not last_name:
         return CaseLookupResponse(status="error", result="Нужно указать case_number или last_name.")
 
-    proxy_urls = proxies_from_env()
-    random.shuffle(proxy_urls)
+    proxy_urls = _ordered_proxies()
     fetcher = Fetcher(
         proxy_urls=proxy_urls,
         delay_range=(0.0, 0.0),
-        timeout=12.0,
-        max_retries=2,
+        timeout=16.0,
+        max_retries=3,
     )
+    t0 = time.monotonic()
     result = search_case_direct(
         fetcher,
         domain,
         CaseQuery(case_number=case_number, last_name=last_name),
         production_type=payload.production_type,
+    )
+    elapsed = time.monotonic() - t0
+    used = ""
+    if fetcher.proxy_urls:
+        used = fetcher.proxy_urls[fetcher._proxy_index % len(fetcher.proxy_urls)]
+    if result.status in {"found", "not_found"} and used:
+        _last_good_proxy = used
+    log.info(
+        "delo slug=%s q=%s status=%s port=%s dt=%.2fs",
+        payload.court_slug,
+        case_number or last_name,
+        result.status,
+        _proxy_port(used) if used else "-",
+        elapsed,
     )
     text = result.as_text() if result.status == "found" else result.message
     return CaseLookupResponse(status=result.status, result=text)

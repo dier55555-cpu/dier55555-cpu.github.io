@@ -1,5 +1,6 @@
 from scraper.proxy_pool import (
     expand_ports,
+    is_dead_proxy,
     is_proxy_failure,
     parse_ports,
     parse_proxy_list,
@@ -51,6 +52,9 @@ def test_proxies_from_env_expands_ports(monkeypatch):
 def test_is_proxy_failure_detects_sudrf_503():
     assert is_proxy_failure("ProxyError Tunnel connection failed: 503 Node has rejected the request")
     assert is_proxy_failure("HTTPSConnectionPool Read timed out")
+    assert is_dead_proxy("Tunnel connection failed: 504")
+    assert is_dead_proxy("503 Node has rejected the request")
+    assert not is_dead_proxy("HTTPSConnectionPool Read timed out")
     assert not is_proxy_failure("HTTP 404")
 
 
@@ -74,3 +78,26 @@ def test_fetcher_rotates_proxy_on_503(monkeypatch):
     assert result.ok
     assert calls[0]["https"].endswith(":10001")
     assert calls[1]["https"].endswith(":10002")
+
+
+def test_fetcher_retries_same_proxy_on_read_timeout(monkeypatch):
+    urls = expand_ports(BASE, [10001, 10002])
+    calls = []
+
+    def fake_request(self, method, url, **kwargs):
+        calls.append(kwargs.get("proxies"))
+        if len(calls) == 1:
+            raise requests.exceptions.ReadTimeout("HTTPSConnectionPool Read timed out")
+        class Resp:
+            status_code = 200
+            encoding = "utf-8"
+            content = b"<html>ok</html>"
+        return Resp()
+
+    monkeypatch.setattr(requests.Session, "request", fake_request)
+    fetcher = Fetcher(proxy_urls=urls, delay_range=(0, 0), timeout=2, max_retries=2)
+    result = fetcher.get("https://sovetsky--vrn.sudrf.ru/", respect_robots=False)
+    assert result.ok
+    assert calls[0]["https"].endswith(":10001")
+    assert calls[1]["https"].endswith(":10001")
+

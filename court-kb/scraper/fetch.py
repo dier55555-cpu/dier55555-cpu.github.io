@@ -15,12 +15,12 @@ import re
 import time
 import urllib.robotparser as robotparser
 from dataclasses import dataclass, field
-from typing import Optional
+from typing import Optional, Union
 from urllib.parse import urljoin, urlparse
 
 import requests
 
-from .proxy_pool import is_proxy_failure, parse_proxy_list
+from .proxy_pool import is_dead_proxy, is_proxy_failure, parse_proxy_list
 
 _META_CHARSET_RE = re.compile(rb'charset=["\']?([a-zA-Z0-9_-]+)', re.IGNORECASE)
 
@@ -54,8 +54,7 @@ BLOCK_MARKERS = (
 # ASCII (иначе HTTP-заголовок будет невалиден).
 DEFAULT_USER_AGENT = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
-    "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36 "
-    "court-kb-bot/1.0 (+https://example.com/bot-contact)"
+    "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
 )
 
 # Подтверждено экспериментально: с обычным набором заголовков requests (только
@@ -66,7 +65,7 @@ DEFAULT_USER_AGENT = (
 BROWSER_LIKE_HEADERS = {
     "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
     "Accept-Language": "ru-RU,ru;q=0.9,en-US;q=0.8,en;q=0.7",
-    "Accept-Encoding": "gzip, deflate, br",
+    "Accept-Encoding": "gzip, deflate",
     "Connection": "keep-alive",
     "Upgrade-Insecure-Requests": "1",
 }
@@ -96,7 +95,7 @@ class Fetcher:
     proxies: Optional[dict] = None
     proxy_urls: list[str] = field(default_factory=list)
     delay_range: tuple[float, float] = (2.0, 5.0)
-    timeout: float = 20.0
+    timeout: Union[float, tuple[float, float]] = 20.0
     max_retries: int = 3
     user_agent: str = DEFAULT_USER_AGENT
     session: requests.Session = field(default_factory=requests.Session)
@@ -183,9 +182,16 @@ class Fetcher:
                 )
             except requests.RequestException as exc:
                 last_error = str(exc)
-                if is_proxy_failure(last_error) and attempt < attempts and self.proxy_urls:
+                if is_dead_proxy(last_error) and attempt < attempts and self.proxy_urls:
                     self._rotate_proxy()
                     continue
+                if is_proxy_failure(last_error) and attempt < attempts:
+                    # Таймаут чтения: тот же sticky-порт, та же Session.
+                    continue
+                if self.proxy_urls:
+                    if attempt < attempts:
+                        continue
+                    break
                 network_block_markers = (
                     "Connection reset by peer",
                     "RemoteDisconnected",

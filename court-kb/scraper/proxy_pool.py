@@ -85,9 +85,11 @@ def proxies_from_env(
 
 
 def is_proxy_failure(error: str) -> bool:
+    """Любая сетевая/прокси-ошибка, после которой имеет смысл повторить запрос."""
     text = (error or "").lower()
     markers = (
         "503",
+        "504",
         "node has rejected",
         "tunnel connection failed",
         "unable to connect to proxy",
@@ -96,5 +98,26 @@ def is_proxy_failure(error: str) -> bool:
         "read timed out",
         "readtimeout",
         "proxy connect aborted",
+    )
+    return any(m in text for m in markers)
+
+
+def is_dead_proxy(error: str) -> bool:
+    """Порт/IP прокси мёртв — надо сменить sticky-порт, а не долбить тот же.
+
+    Read timeout сюда не входит: к sudrf первый CONNECT часто срывается,
+    а повтор по той же сессии (keep-alive) уже проходит.
+    """
+    text = (error or "").lower()
+    if "read timed out" in text or "readtimeout" in text:
+        return False
+    markers = (
+        "503",
+        "504",
+        "node has rejected",
+        "tunnel connection failed",
+        "unable to connect to proxy",
+        "proxy connect aborted",
+        "407",
     )
     return any(m in text for m in markers)
