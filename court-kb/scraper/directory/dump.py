@@ -50,7 +50,15 @@ def main(argv: list[str] | None = None) -> int:
 
     client = DaDataCourtClient(args.api_key)
     raw = dump_courts(client, types, pause=args.pause, progress=progress)
-    records = sorted_records(fill_missing_regions(enrich_court(row) for row in raw))
+    raw_path = args.json.with_name("courts-ru.raw.json")
+    raw_path.parent.mkdir(parents=True, exist_ok=True)
+    raw_path.write_text(
+        __import__("json").dumps(raw, ensure_ascii=False),
+        encoding="utf-8",
+    )
+    if not args.quiet:
+        print(f"Сырой дамп: {len(raw)} записей → {raw_path}", file=sys.stderr, flush=True)
+    records = sorted_records(fill_missing_regions([enrich_court(row) for row in raw]))
     extra = {"dadata_calls": client.calls, "types": list(types)}
     write_json(args.json, records, extra=extra)
     write_xlsx(args.xlsx, records)

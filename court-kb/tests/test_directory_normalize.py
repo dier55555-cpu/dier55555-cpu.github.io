@@ -121,7 +121,8 @@ def test_fill_missing_region_from_neighbours():
         "website": "http://oblsud.vrn.sudrf.ru",
     })
     assert city_court.region == ""
-    filled = fill_missing_regions([city_court, oblast])
+    filled = fill_missing_regions(item for item in [city_court, oblast])
+    assert len(filled) == 2
     by_code = {item.code: item for item in filled}
     assert by_code["36RS0005"].region == "Воронежская область"
 

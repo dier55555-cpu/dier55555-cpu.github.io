@@ -1,5 +1,6 @@
 data/*
 !data/.gitkeep
+directory/courts-ru.raw.json
 __pycache__/
 *.pyc
 .venv/

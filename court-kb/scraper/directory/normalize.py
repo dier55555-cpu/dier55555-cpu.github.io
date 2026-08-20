@@ -284,8 +284,9 @@ def parse_district(name: str) -> str:
 
 def fill_missing_regions(records: Sequence[CourtRecord]) -> list[CourtRecord]:
     """Добивает пустой регион по коду суда: у райсуда в областном центре в адресе часто только «г Воронеж»."""
+    rows = list(records)
     votes: dict[str, Counter[str]] = defaultdict(Counter)
-    for record in records:
+    for record in rows:
         if record.region_code and record.region:
             votes[record.region_code][record.region] += 1
     chosen = {
@@ -294,7 +295,7 @@ def fill_missing_regions(records: Sequence[CourtRecord]) -> list[CourtRecord]:
         if counter
     }
     filled = []
-    for record in records:
+    for record in rows:
         if record.region or record.region_code not in chosen:
             filled.append(record)
         else:
