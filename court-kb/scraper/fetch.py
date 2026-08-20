@@ -44,6 +44,7 @@ def _decode_body(content: bytes, header_encoding: Optional[str]) -> str:
 BLOCK_MARKERS = (
     "заблокирован по соображениям безопасности",
     "Судебный департамент при Верховном Суде Российской Федерации",
+    "Данный запрос некорректен",
 )
 
 # Замените contact-url на реальный адрес/страницу с контактами клиента —
@@ -54,6 +55,19 @@ DEFAULT_USER_AGENT = (
     "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36 "
     "court-kb-bot/1.0 (+https://example.com/bot-contact)"
 )
+
+# Подтверждено экспериментально: с обычным набором заголовков requests (только
+# User-Agent) сайты ГАС «Правосудие» даже с российского резидентного IP
+# отвечают "Данный запрос некорректен, просьба изменить параметры запроса (B)"
+# — WAF ждёт заголовки, типичные для настоящего браузера. Без них запрос
+# считается подозрительным и блокируется отдельно от гео-проверки.
+BROWSER_LIKE_HEADERS = {
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
+    "Accept-Language": "ru-RU,ru;q=0.9,en-US;q=0.8,en;q=0.7",
+    "Accept-Encoding": "gzip, deflate, br",
+    "Connection": "keep-alive",
+    "Upgrade-Insecure-Requests": "1",
+}
 
 
 @dataclass
@@ -96,7 +110,7 @@ class Fetcher:
             try:
                 resp = self.session.get(
                     robots_url,
-                    headers={"User-Agent": self.user_agent},
+                    headers={"User-Agent": self.user_agent, **BROWSER_LIKE_HEADERS},
                     proxies=self.proxies,
                     timeout=self.timeout,
                 )
@@ -136,7 +150,7 @@ class Fetcher:
                     url,
                     params=params,
                     data=data,
-                    headers={"User-Agent": self.user_agent, "Accept-Language": "ru-RU,ru;q=0.9"},
+                    headers={"User-Agent": self.user_agent, **BROWSER_LIKE_HEADERS},
                     proxies=self.proxies,
                     timeout=self.timeout,
                 )
@@ -183,7 +197,7 @@ class Fetcher:
         try:
             resp = self.session.get(
                 url,
-                headers={"User-Agent": self.user_agent},
+                headers={"User-Agent": self.user_agent, **BROWSER_LIKE_HEADERS},
                 proxies=self.proxies,
                 timeout=self.timeout,
             )
