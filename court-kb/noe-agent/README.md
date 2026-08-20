@@ -10,7 +10,7 @@
 | Роль | Справочник судов РФ (БЗ по частям) + живой поиск дела в 6 райсудах Воронежа |
 | Канал | тестовый чат НОЕ |
 | БЗ | **Суды-1…5**, **Мировые-1…7** — см. `KB-SPLIT.md`, `directory/packs/` (часы с сайта при парсинге, не из FAQ) |
-| Инструкция | `prompt.md` (**prompt_version 19+**) |
+| Инструкция | `prompt.md` (**prompt_version 21**) |
 | Действие | **Дело** (`06e7d3ef-d8ce-4ab8-acc5-baec246cb86b`) → n8n `court-agent-yurist` |
 | Источники | `SOURCES-PARSING.md` |
 | Проверка | `test-dialogs.md` |
