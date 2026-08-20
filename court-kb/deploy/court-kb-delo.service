@@ -1,0 +1,16 @@
+[Unit]
+Description=court-kb delo API (слой 2 для Анны)
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/court-kb
+Environment=PYTHONUNBUFFERED=1
+EnvironmentFile=/opt/court-kb/.env
+ExecStart=/opt/court-kb/venv/bin/uvicorn api.delo_app:app --host 0.0.0.0 --port 8080 --workers 1
+Restart=always
+RestartSec=3
+MemoryMax=400M
+
+[Install]
+WantedBy=multi-user.target
