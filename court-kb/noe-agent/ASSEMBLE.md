@@ -11,11 +11,11 @@
 | Суды России | https://docs.google.com/spreadsheets/d/19sxmrNDDHu0u-g4y3987g5hMMSdFh5VkKKmRRH-v2VU/edit?usp=sharing | коллекция `c36e77a3-bff0-4bd2-be6a-f85d52b418fc` |
 | Мировые суды России | https://docs.google.com/spreadsheets/d/109ThgsNtz_pyaLu0RZonEqh0oN1ntS5OCbJAfH_M6HQ/edit?usp=sharing | коллекция `cca3eb8d-2524-4db9-8e03-bd39f9216689` |
 
-Обе привязаны только к агенту «Ассистент - юриста». Легион не трогали.
+Обе привязаны только к агенту **Анна — ассистент юриста (тест)**. Легион не трогали.
 
 Ноя забирает CSV: `https://docs.google.com/spreadsheets/d/<ID>/export?format=csv` (как прайсы Легиона).
 
-Промпт агента — `prompt.md` (prompt_version 10). Короткие документы — `kb/01`…`04`. Шесть FAQ по райсудам Воронежа оставлены (часы и телефоны).
+Промпт агента — `prompt.md` (в кабинете **prompt_version 12** после заливки 20.08.2026). Короткие документы — `kb/01`…`04`. Шесть FAQ по райсудам Воронежа оставлены (часы и телефоны). Что парсим, а что нет — `SOURCES-PARSING.md`.
 
 ### search_prompt коллекции
 
