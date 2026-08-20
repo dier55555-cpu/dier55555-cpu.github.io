@@ -21,7 +21,7 @@ _SUDRF_LIVE = re.compile(
 
 _POSTAL = re.compile(r"^\d{6}$")
 _SETTLEMENT = re.compile(
-    r"^(?:г(?:ород)?|пгт|пос(?:ёлок|елок)?|п|с(?:ело)?|ст(?:аница)?|аул|х(?:утор)?|д(?:ер(?:евня)?)?)\.?\s+"
+    r"^(?:г(?:ород)?|пгт|рп|нп|пос(?:ёлок|елок)?|п|с(?:ело)?|ст(?:аница|-ца)?|аул|х(?:утор)?|д(?:ер(?:евня)?)?)\.?\s+"
     r"([А-ЯЁ][А-ЯЁа-яё0-9IVXLCDM«»\"'\-\s]*)$",
     re.IGNORECASE,
 )
@@ -185,8 +185,14 @@ def parse_region_from_address(address: str) -> str:
     for part in parts:
         if _POSTAL.match(part):
             continue
-        if _SETTLEMENT.match(part):
+        settlement = _SETTLEMENT.match(part)
+        if settlement:
+            place = _norm_key(settlement.group(1))
+            if place in _FEDERAL_CITIES:
+                return _FEDERAL_CITIES[place]
             continue
+        if "республика" in _norm_key(part):
+            return _expand_region_abbrev(part)
         for pattern in _REGION_IN_ADDRESS:
             match = pattern.match(part)
             if match:
@@ -204,6 +210,8 @@ def parse_region_from_address(address: str) -> str:
 def parse_region_from_name(name: str) -> str:
     text = _clean(name)
     key = _norm_key(text)
+    if re.search(r"верховный суд российской федерации", key):
+        return "Российская Федерация"
     if re.search(r"города москвы|\bг\.?\s*москвы\b|московский городской суд", key):
         return "Москва"
     if re.search(r"санкт-петербургск", key) and "городск" in key:

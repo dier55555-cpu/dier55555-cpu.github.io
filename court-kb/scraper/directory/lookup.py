@@ -17,7 +17,6 @@ STOPWORDS = {
     "межрайонный",
     "городской",
     "городского",
-    "областной",
     "суд",
     "суда",
     "города",
@@ -122,6 +121,10 @@ def lookup_courts(
     tokens = tokenize_query(query)
     if not tokens:
         return []
+    qn = _norm_key(query)
+    if court_types is None and "миров" not in qn and "участок" not in qn:
+        # Обычный запрос «Ленинский район г. Ставрополь» — районный/областной, не 20 мировых участков.
+        court_types = ("RS", "OS", "AJ", "KJ", "VS")
     allowed = {t.upper() for t in court_types} if court_types else None
     ranked: list[tuple[int, CourtRecord]] = []
     for record in records:

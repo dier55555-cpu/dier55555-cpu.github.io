@@ -8,6 +8,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import sys
 from pathlib import Path
@@ -33,6 +34,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--json", type=Path, default=DEFAULT_JSON)
     parser.add_argument("--xlsx", type=Path, default=DEFAULT_XLSX)
     parser.add_argument("--pause", type=float, default=0.05, help="Пауза между запросами к DaData, сек")
+    parser.add_argument("--from-raw", type=Path, help="Пересобрать JSON/Excel из сырого дампа без DaData")
     parser.add_argument("--quiet", action="store_true")
     return parser
 
@@ -40,30 +42,38 @@ def build_parser() -> argparse.ArgumentParser:
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     types = tuple(part.strip().upper() for part in args.types.split(",") if part.strip())
-    if not args.api_key:
-        print("Задайте DADATA_API_KEY или --api-key", file=sys.stderr)
-        return 2
 
     def progress(message: str) -> None:
         if not args.quiet:
             print(message, file=sys.stderr, flush=True)
 
-    client = DaDataCourtClient(args.api_key)
-    raw = dump_courts(client, types, pause=args.pause, progress=progress)
-    raw_path = args.json.with_name("courts-ru.raw.json")
-    raw_path.parent.mkdir(parents=True, exist_ok=True)
-    raw_path.write_text(
-        __import__("json").dumps(raw, ensure_ascii=False),
-        encoding="utf-8",
-    )
-    if not args.quiet:
-        print(f"Сырой дамп: {len(raw)} записей → {raw_path}", file=sys.stderr, flush=True)
+    dadata_calls = 0
+    if args.from_raw:
+        raw = json.loads(args.from_raw.read_text(encoding="utf-8"))
+        if isinstance(raw, dict) and "courts" in raw:
+            raw = raw["courts"]
+        progress(f"Читаю сырой дамп: {len(raw)} записей из {args.from_raw}")
+    else:
+        if not args.api_key:
+            print("Задайте DADATA_API_KEY или --api-key", file=sys.stderr)
+            return 2
+        client = DaDataCourtClient(args.api_key)
+        raw = dump_courts(client, types, pause=args.pause, progress=progress)
+        dadata_calls = client.calls
+        raw_path = args.json.with_name("courts-ru.raw.json")
+        raw_path.parent.mkdir(parents=True, exist_ok=True)
+        raw_path.write_text(json.dumps(raw, ensure_ascii=False), encoding="utf-8")
+        progress(f"Сырой дамп: {len(raw)} записей → {raw_path}")
+
     records = sorted_records(fill_missing_regions([enrich_court(row) for row in raw]))
-    extra = {"dadata_calls": client.calls, "types": list(types)}
+    extra = {
+        "dadata_calls": dadata_calls,
+        "types": sorted({record.court_type for record in records if record.court_type}),
+    }
     write_json(args.json, records, extra=extra)
     write_xlsx(args.xlsx, records)
     print(
-        f"Готово: {len(records)} судов, {client.calls} запросов DaData\n"
+        f"Готово: {len(records)} судов, {dadata_calls} запросов DaData\n"
         f"JSON: {args.json}\n"
         f"Excel: {args.xlsx}"
     )

@@ -127,7 +127,26 @@ def test_fill_missing_region_from_neighbours():
     assert by_code["36RS0005"].region == "Воронежская область"
 
 
-def test_city_nominative_stavropol():
+def test_parse_rabochiy_poselok_and_chuvashia():
+    record = enrich_court({
+        "code": "22RS0001",
+        "name": "Благовещенский районный суд Алтайского края",
+        "court_type": "RS",
+        "address": "658670, Алтайский край, рп Благовещенка, пер Кучеровых, д 65",
+        "website": "http://blagoveshensky.alt.sudrf.ru",
+    })
+    assert record.city == "Благовещенка"
+    assert record.region == "Алтайский край"
+
+    chuvash = enrich_court({
+        "code": "21RS0001",
+        "name": "Алатырский районный суд Чувашской Республики",
+        "court_type": "RS",
+        "address": "429820, Чувашская Республика - Чувашия, г Алатырь, ул Первомайская, д 35",
+        "website": "http://alatyrsky.chv.sudrf.ru",
+    })
+    assert chuvash.city == "Алатырь"
+    assert "Чуваш" in chuvash.region
     assert city_nominative("Ставрополя") == "Ставрополь"
     assert city_nominative("Воронежа") == "Воронеж"
     assert city_nominative("Москвы") == "Москва"
@@ -157,3 +176,14 @@ def test_walk_prefix_expands_when_api_returns_20():
     assert "36RS00" in calls
     assert "36RS000" in calls
     assert "36RS001" in calls
+
+
+def test_moscow_address_without_name_suffix():
+    record = enrich_court({
+        "code": "77MS0001",
+        "name": "Судебный участок № 1 района Матушкино",
+        "court_type": "MS",
+        "address": "124681, г Москва, г Зеленоград, к 200Г",
+        "website": "https://mos-sud.ru",
+    })
+    assert record.region == "Москва"

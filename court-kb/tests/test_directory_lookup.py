@@ -62,6 +62,20 @@ def test_lookup_sovietsky_voronezh():
     assert matches[0].code == "36RS0005"
 
 
-def test_lookup_requires_all_tokens():
+def test_lookup_oblast_court_prefers_os():
+    extra = enrich_court({
+        "code": "36OS0000",
+        "name": "Воронежский областной суд",
+        "court_type": "OS",
+        "address": "394036, г Воронеж, пр-кт Революции, д 14А",
+        "website": "http://oblsud.vrn.sudrf.ru",
+    })
+    matches = lookup_courts("Воронежский областной", _records() + [extra])
+    assert matches[0].code == "36OS0000"
+
+
+def test_lookup_skips_magistrate_by_default():
+    matches = lookup_courts("Ленинский район г. Ставрополь", _records())
+    assert all(item.court_type != "MS" for item in matches)
     matches = lookup_courts("Ленинский Норильск", _records())
     assert matches == []
