@@ -90,6 +90,40 @@ def test_crawl_status_without_prior_run():
     assert response.json()["status"] in ("no_data", "ok")
 
 
+def test_resolve_court_without_directory(monkeypatch, tmp_path):
+    monkeypatch.setattr("api.main.DIRECTORY_PATH", tmp_path / "missing.json")
+    response = client.post("/courts/resolve", json={"query": "Ленинский район г. Ставрополь"})
+    assert response.status_code == 200
+    body = response.json()
+    assert body["status"] == "no_directory"
+    assert body["matches"] == []
+
+
+def test_resolve_court_from_local_directory(monkeypatch, tmp_path):
+    from scraper.directory.export import write_json
+    from scraper.directory.normalize import enrich_court
+
+    records = [
+        enrich_court({
+            "code": "26RS0002",
+            "name": "Ленинский районный суд г. Ставрополя",
+            "court_type": "RS",
+            "address": "355017, г Ставрополь, ул Ленина, д 219",
+            "website": "http://leninsky.stv.sudrf.ru",
+        })
+    ]
+    path = tmp_path / "courts-ru.json"
+    write_json(path, records)
+    monkeypatch.setattr("api.main.DIRECTORY_PATH", path)
+    response = client.post("/courts/resolve", json={"query": "Ленинский район г. Ставрополь"})
+    assert response.status_code == 200
+    body = response.json()
+    assert body["status"] == "ok"
+    assert body["matches"][0]["code"] == "26RS0002"
+    assert body["matches"][0]["sudrf_domain"] == "leninsky--stv.sudrf.ru"
+    assert body["matches"][0]["city"] == "Ставрополь"
+
+
 def test_api_key_check_accepts_correct_key(monkeypatch):
     monkeypatch.setenv("COURT_KB_API_KEY", "secret-key")
     response = client.post(

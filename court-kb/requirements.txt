@@ -16,6 +16,9 @@ mcp==1.12.4
 # Тесты
 pytest>=8.0
 
+# Справочник судов России (дамп DaData → Excel/JSON)
+openpyxl>=3.1
+
 # HTTP-обёртка (api/) для интеграции через вебхук из n8n/НОЕ
 fastapi>=0.110
 uvicorn[standard]>=0.29

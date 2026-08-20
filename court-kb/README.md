@@ -95,6 +95,7 @@ court-kb/
     fetch.py             # HTTP-слой: ретраи, паузы, детект блокировки, robots.txt
     extract.py           # извлечение ссылок и основного текста (trafilatura)
     crawl.py             # обход сайта суда, запись pages.jsonl/report.json (слой 1)
+    directory/           # справочник всех судов РФ (DaData → JSON/Excel, поиск по городу/району)
     case_lookup/
       forms.py            # эвристический разбор формы поиска дела (sud_delo)
       case_card.py         # разбор карточки дела / результатов поиска
@@ -114,7 +115,8 @@ court-kb/
   docker-compose.yml
   .env.example
   tests/                   # юнит-тесты на синтетических HTML-фикстурах
-  data/                   # результат обхода (в git не коммитится)
+  directory/               # courts-ru.json — локальный справочник (после dump)
+  data/                   # результат обхода и Excel (в git не коммитится)
 ```
 
 ## Запуск сбора данных
@@ -131,8 +133,45 @@ python -m scraper.crawl --config courts.yaml --out data \
 python -m scraper.crawl --config courts.yaml --out data --only sovetsky-vrn
 ```
 
-После запуска смотрите `data/summary.json` — там по каждому суду видно,
-сколько страниц собрано и не заблокирован ли сайт.
+## Справочник всех судов России (город / район / сайт)
+
+Чтобы агент находил не только 6 райсудов Воронежа, а любой суд по фразе
+вроде «Ленинский район г. Ставрополь», справочник снимается с DaData
+(`suggest/court`, не больше 20 строк за запрос) обходом префиксов кода
+(`36RS` → `36RS0` → …) и кладётся локально. DaData в чате больше не нужна.
+
+```bash
+export DADATA_API_KEY="..."
+# районные + областные + апелляция/кассация + ВС РФ
+python -m scraper.directory.dump
+# плюс мировые участки:
+python -m scraper.directory.dump --types RS,OS,AJ,KJ,VS,MS
+```
+
+Результат:
+
+- `directory/courts-ru.json` — для поиска (`scraper.directory.lookup` и
+  `POST /courts/resolve`);
+- `data/courts-ru.xlsx` — таблица с автофильтром и листами **Города** /
+  **Районы** / типы судов.
+
+Колонки: код, название, тип, регион, город, район, адрес, сайт DaData,
+живой домен `host--region.sudrf.ru`, флаг «парсер G1/U1». Сайты
+`mos-gorsud.ru` и прочие не-sudrf помечены как неподдерживаемые парсером.
+
+Поиск без сети:
+
+```bash
+python - <<'PY'
+from scraper.directory import load_directory, lookup_courts
+rows = load_directory("directory/courts-ru.json")
+for court in lookup_courts("Ленинский район г. Ставрополь", rows):
+    print(court.name, court.sudrf_domain, court.parser_supported)
+PY
+```
+
+Сбор страниц сайта суда (слой 1) — смотрите `data/summary.json`: там по каждому
+суду видно, сколько страниц собрано и не заблокирован ли сайт.
 
 Скрипт уважает `robots.txt`, ходит с задержкой 2–5 сек между запросами
 (настраивается `--min-delay/--max-delay`) и не забирает файлы (pdf/doc/картинки).

@@ -35,10 +35,12 @@ from pydantic import BaseModel
 from mcp_server.server import _build_captcha_solver, _build_fetcher, _load_courts_config, load_corpus, score, _tokenize
 from scraper.case_lookup.search import CaseQuery, search_case
 from scraper.crawl import crawl_court
+from scraper.directory.lookup import load_directory, lookup_courts
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 CORPUS_PATH = Path(os.environ.get("COURT_KB_CORPUS", PROJECT_ROOT / "data" / "corpus.jsonl"))
 COURTS_CONFIG_PATH = Path(os.environ.get("COURT_KB_COURTS_CONFIG", PROJECT_ROOT / "courts.yaml"))
+DIRECTORY_PATH = Path(os.environ.get("COURT_KB_DIRECTORY", PROJECT_ROOT / "directory" / "courts-ru.json"))
 
 app = FastAPI(
     title="court-kb API",
@@ -98,6 +100,56 @@ def list_courts(x_api_key: Optional[str] = Header(default=None)) -> dict:
             "production_types": list((case_search.get("production_types") or {}).keys()),
         })
     return {"courts": courts}
+
+
+class CourtResolveRequest(BaseModel):
+    query: str
+    limit: int = 5
+
+
+@app.post("/courts/resolve")
+def resolve_court(
+    payload: CourtResolveRequest,
+    x_api_key: Optional[str] = Header(default=None),
+) -> dict:
+    """Локальный справочник: «Ленинский район г. Ставрополь» → сайт суда, без DaData."""
+    _check_api_key(x_api_key)
+    text = (payload.query or "").strip()
+    if not text:
+        raise HTTPException(status_code=400, detail="Нужно указать query")
+    cap = payload.limit
+    if not DIRECTORY_PATH.exists():
+        return {
+            "query": text,
+            "matches": [],
+            "status": "no_directory",
+            "result": (
+                "Справочник судов ещё не выгружен. "
+                "Запустите python -m scraper.directory.dump"
+            ),
+        }
+    records = load_directory(DIRECTORY_PATH)
+    matches = lookup_courts(text, records, limit=max(1, min(cap, 20)))
+    return {
+        "query": text,
+        "status": "ok" if matches else "not_found",
+        "matches": [
+            {
+                "code": item.code,
+                "name": item.name,
+                "court_type": item.court_type,
+                "region": item.region,
+                "city": item.city,
+                "district": item.district,
+                "address": item.address,
+                "website": item.website,
+                "sudrf_domain": item.sudrf_domain,
+                "parser_supported": item.parser_supported,
+                "base_url": f"https://{item.sudrf_domain}/" if item.sudrf_domain else "",
+            }
+            for item in matches
+        ],
+    }
 
 
 @app.get("/corpus/export")
