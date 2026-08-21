@@ -27,7 +27,6 @@
 
 from __future__ import annotations
 
-import re
 from dataclasses import dataclass, field
 from typing import Literal, Optional
 from urllib.parse import urljoin
@@ -35,6 +34,7 @@ from urllib.parse import urljoin
 from ..fetch import Fetcher
 from .captcha import CaptchaSolver
 from .case_card import CaseCard, format_case_card, looks_like_not_found, looks_like_wrong_captcha, parse_case_cards, parse_search_hits
+from .case_number import normalize_case_number
 from .forms import SearchFormInfo, parse_search_form
 
 Status = Literal[
@@ -74,27 +74,6 @@ class CaseQuery:
     case_number: Optional[str] = None
     case_uid: Optional[str] = None
     last_name: Optional[str] = None
-
-
-def normalize_case_number(raw: Optional[str]) -> Optional[str]:
-    """Клиент часто присылает «2-1248/2026 ~ М-52/2026» — sudrf по такому не ищет.
-
-    Оставляем основной номер производства (до «~» / «м-» / лишнего хвоста).
-    """
-    if not raw:
-        return None
-    text = str(raw).strip()
-    if not text:
-        return None
-    # «2-1248/2026 ~ М-52/2026» / «2-1248/2026~М-52/2026»
-    for sep in ("~", "～", "≈"):
-        if sep in text:
-            text = text.split(sep, 1)[0].strip()
-            break
-    # На всякий случай отрезаем хвост « М-52/2026» без тильды.
-    text = re.sub(r"\s+[МмM]\s*[-–—]?\s*\d+/\d+\s*$", "", text).strip()
-    text = re.sub(r"\s+", " ", text)
-    return text or None
 
 
 @dataclass

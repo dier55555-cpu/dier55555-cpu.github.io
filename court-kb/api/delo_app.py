@@ -21,9 +21,9 @@ from scraper.case_lookup.search import (
     CaseQuery,
     CaseSearchResult,
     VORONEZH_SUDRF_COURTS,
-    normalize_case_number,
     search_case_direct,
 )
+from scraper.case_lookup.case_number import validate_case_number
 from scraper.court_info import fetch_court_info, normalize_topic, website_to_origin
 from scraper.fetch import Fetcher
 from scraper.proxy_pool import proxies_from_env
@@ -218,7 +218,17 @@ def delo_lookup(payload: CaseLookupRequest, x_api_key: Optional[str] = Header(de
 
     website = (payload.website or "").strip() or None
     topic = (payload.topic or "").strip() or None
-    case_number = normalize_case_number(payload.case_number)
+    case_number = None
+    case_number_raw = (payload.case_number or "").strip() or None
+    if case_number_raw:
+        parsed = validate_case_number(case_number_raw)
+        if not parsed.ok:
+            return CaseLookupResponse(
+                status="error",
+                result=parsed.error
+                or "Некорректный номер дела. Нужен вид 2-1248/2026 (без «ДЕЛО №» и без ~ М-…).",
+            )
+        case_number = parsed.normalized
     last_name = (payload.last_name or "").strip() or None
     mode = (payload.mode or "").strip().lower()
 
@@ -255,9 +265,10 @@ def delo_lookup(payload: CaseLookupRequest, x_api_key: Optional[str] = Header(de
         production_type=payload.production_type,
     )
     log.info(
-        "delo slug=%s q=%s status=%s port=%s dt=%.2fs",
+        "delo slug=%s q=%s raw_q=%s status=%s port=%s dt=%.2fs",
         payload.court_slug,
         case_number or last_name,
+        case_number_raw or "",
         result.status,
         _proxy_port(used) if used else "direct",
         time.monotonic() - t0,
