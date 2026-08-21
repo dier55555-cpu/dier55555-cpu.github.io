@@ -50,3 +50,14 @@ court_slug: sovetsky-vrn | kominternovsky-vrn | zheleznodorozhny-vrn | levoberez
 
 Суд не из списка → карточку не ищи; для справки используй Режим А с website из БЗ.
 status error/not_found → не выдумывай карточку, дай сайт суда.
+
+## HTTP в кабинете Нои (критично)
+
+В действии «Дело» у HTTP-action поле `body_template` должно подставлять параметры:
+
+```json
+{"mode":"{{mode}}","website":"{{website}}","topic":"{{topic}}","court_slug":"{{court_slug}}","case_number":"{{case_number}}","last_name":"{{last_name}}"}
+```
+
+`body_template: "{}"` отправляет пустое тело — n8n не получает website/topic.
+`timeout_sec` держать ≥ 45 (парсинг сайта 5–15с, запас на прокси).

@@ -27,6 +27,9 @@ log = logging.getLogger("delo")
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 
 _last_good_proxy: Optional[str] = None
+# Кэш справок (website+topic), чтобы повтор Анны не долбил sudrf и не ловил TCP-ban.
+_spravka_cache: dict[tuple[str, str], tuple[float, object]] = {}
+_SPRAVKA_CACHE_TTL_SEC = 1800.0
 
 
 def _ordered_proxies() -> list[str]:
@@ -53,7 +56,14 @@ def _check_api_key(x_api_key: Optional[str]) -> None:
         raise HTTPException(status_code=401, detail="Неверный или отсутствующий X-API-Key")
 
 
-def _make_fetcher() -> Fetcher:
+def _make_fetcher(*, info: bool = False) -> Fetcher:
+    if info:
+        return Fetcher(
+            proxy_urls=[],
+            delay_range=(0.0, 0.0),
+            timeout=5.0,
+            max_retries=1,
+        )
     return Fetcher(
         proxy_urls=_ordered_proxies(),
         delay_range=(0.0, 0.0),
@@ -62,9 +72,49 @@ def _make_fetcher() -> Fetcher:
     )
 
 
-def _remember_proxy(fetcher: Fetcher, ok: bool) -> str:
+def _spravka_with_fallback(website: str, topic: str):
+    """direct → до 2 sticky-прокси. Кэш 30 мин. Таймаут канала ≥ реального RTT sudrf (~3–8с)."""
+    global _last_good_proxy
+    origin = website_to_origin(website) or website.strip()
+    cache_key = (origin.rstrip("/"), topic)
+    now = time.monotonic()
+    hit = _spravka_cache.get(cache_key)
+    if hit and now - hit[0] < _SPRAVKA_CACHE_TTL_SEC:
+        return hit[1], None, "cache"
+
+    channels: list[Optional[str]] = [None]  # None = прямой IP VPS
+    channels.extend(_ordered_proxies()[:2])
+
+    last_result = None
+    last_fetcher: Optional[Fetcher] = None
+    used = ""
+    # sudrf часто отвечает за 3–8с; слишком короткий timeout даёт ложный error.
+    channel_timeout = 12.0
+    for channel in channels:
+        if channel is None:
+            fetcher = Fetcher(proxy_urls=[], delay_range=(0.0, 0.0), timeout=channel_timeout, max_retries=1)
+        else:
+            fetcher = Fetcher(proxy_urls=[channel], delay_range=(0.0, 0.0), timeout=channel_timeout, max_retries=1)
+        result = fetch_court_info(fetcher, website, topic=topic)
+        last_result, last_fetcher = result, fetcher
+        if result.status == "found":
+            if channel:
+                _last_good_proxy = channel
+                used = channel
+            _spravka_cache[cache_key] = (now, result)
+            return result, fetcher, used
+        if result.status == "not_found":
+            _spravka_cache[cache_key] = (now, result)
+            return result, fetcher, used if channel else ""
+    assert last_result is not None
+    return last_result, last_fetcher, used
+
+
+def _remember_proxy(fetcher: Optional[Fetcher], ok: bool) -> str:
     global _last_good_proxy
     used = ""
+    if fetcher is None:
+        return used
     if fetcher.proxy_urls:
         used = fetcher.proxy_urls[fetcher._proxy_index % len(fetcher.proxy_urls)]
     if ok and used:
@@ -109,16 +159,22 @@ def spravka_lookup(payload: SpravkaRequest, x_api_key: Optional[str] = Header(de
             result="Нужна ссылка на официальный сайт суда (поле САЙТ из справочника).",
         )
     topic = normalize_topic(payload.topic)
-    fetcher = _make_fetcher()
     t0 = time.monotonic()
-    result = fetch_court_info(fetcher, website, topic=topic)
-    used = _remember_proxy(fetcher, result.status == "found")
+    result, fetcher, used = _spravka_with_fallback(website, topic)
+    if used == "cache":
+        port = "cache"
+    elif used:
+        port = _proxy_port(used)
+    elif fetcher is not None and not fetcher.proxy_urls:
+        port = "direct"
+    else:
+        port = _proxy_port(_remember_proxy(fetcher, result.status == "found")) if fetcher else "-"
     log.info(
         "spravka topic=%s site=%s status=%s port=%s dt=%.2fs",
         topic,
         website_to_origin(website),
         result.status,
-        _proxy_port(used) if used else "-",
+        port,
         time.monotonic() - t0,
     )
     text = result.as_text() if result.status == "found" else result.message

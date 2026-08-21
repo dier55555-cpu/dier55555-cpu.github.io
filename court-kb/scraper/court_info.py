@@ -175,6 +175,53 @@ def fetch_court_info(
             topic=topic,
         )
 
+    # Часы: один-два URL на канал (direct/прокси). Ротацию каналов делает delo_app.
+    # Иначе 3 URL × timeout на мёртвом канале съедают бюджет n8n.
+    if topic == "hours":
+        best_text = ""
+        best_url = origin + "/"
+        best_score = -1
+        saw_block = False
+        for url in (
+            origin + "/modules.php?name=information&id=1",
+            origin + "/",
+        ):
+            page = fetcher.get(url, respect_robots=False)
+            if page.blocked:
+                saw_block = True
+                break
+            if not page.ok or not page.html:
+                break
+            extracted = _extract_topic_block(page.html, topic)
+            score = _score_extract(extracted, topic, page.url or url)
+            if score > best_score:
+                best_score = score
+                best_text = extracted
+                best_url = page.url or url
+            if best_score >= 80 and len(best_text) >= 60:
+                return CourtInfoResult("found", best_text, source_url=best_url, topic=topic)
+        if len(best_text) >= 60 and best_score >= 40:
+            return CourtInfoResult("found", best_text, source_url=best_url, topic=topic)
+        if saw_block:
+            return CourtInfoResult(
+                "blocked",
+                "Сайт суда заблокировал запрос (нужен российский IP/прокси).",
+                topic=topic,
+            )
+        if best_score < 0:
+            return CourtInfoResult(
+                "error",
+                "Сайт суда временно недоступен через текущий канал. Попробуйте ещё раз.",
+                topic=topic,
+            )
+        return CourtInfoResult(
+            "not_found",
+            "На сайте суда не удалось выделить запрошенные сведения в типовых разделах "
+            f"(О суде / Справочная информация). Проверьте сайт напрямую: {origin}/",
+            source_url=origin + "/",
+            topic=topic,
+        )
+
     home = fetcher.get(origin + "/", respect_robots=False)
     if home.blocked:
         return CourtInfoResult(
@@ -194,9 +241,9 @@ def fetch_court_info(
 
     # Типовые модули ГАС — порядок важен для часов.
     defaults = [
+        "/modules.php?name=information&id=1",
         "/modules.php?name=information",
         "/modules.php?name=info_court",
-        "/modules.php?name=information&id=1",
         "/modules.php?name=information&id=2",
         "/modules.php?name=info_court&rid=1",
         "/modules.php?name=info_court&rid=4",
@@ -210,6 +257,13 @@ def fetch_court_info(
         defaults = ["/modules.php?name=govduty", "/modules.php?name=info_court"] + defaults
     elif topic == "structure":
         defaults = ["/modules.php?name=info_court", "/modules.php?name=info_court&rid=2"] + defaults
+    elif topic == "hours":
+        defaults = [
+            "/modules.php?name=information&id=1",
+            "/modules.php?name=info_court&rid=1",
+            "/modules.php?name=information",
+            "/modules.php?name=info_court",
+        ]
 
     for path in defaults:
         u = origin + path
@@ -219,42 +273,82 @@ def fetch_court_info(
     if origin + "/" not in candidates:
         candidates.insert(0, origin + "/")
 
+    page_limit = 5 if topic == "hours" else 12
+    good_enough = 100 if topic == "hours" else 10_000
+    result = _try_pages(
+        fetcher,
+        topic,
+        origin,
+        candidates,
+        markers=markers,
+        page_limit=page_limit,
+        good_enough=good_enough,
+    )
+    if result is not None:
+        return result
+    return CourtInfoResult(
+        "not_found",
+        "На сайте суда не удалось выделить запрошенные сведения в типовых разделах "
+        f"(О суде / Справочная информация). Проверьте сайт напрямую: {origin}/",
+        source_url=origin + "/",
+        topic=topic,
+    )
+
+
+def _try_pages(
+    fetcher: Fetcher,
+    topic: str,
+    origin: str,
+    candidates: list[str],
+    *,
+    markers: tuple[str, ...],
+    page_limit: int,
+    good_enough: int,
+) -> Optional[CourtInfoResult]:
     best_text = ""
-    best_url = origin + "/"
+    best_url = candidates[0] if candidates else origin + "/"
     best_score = -1
     seen_pages: set[str] = set()
-    for url in candidates[:12]:
+    queue = list(candidates)
+    scanned = 0
+    idx = 0
+    while idx < len(queue) and scanned < page_limit:
+        url = queue[idx]
+        idx += 1
         if url in seen_pages:
             continue
         seen_pages.add(url)
+        scanned += 1
         page = fetcher.get(url, respect_robots=False)
+        if page.blocked and not best_text:
+            return CourtInfoResult(
+                "blocked",
+                "Сайт суда заблокировал запрос (нужен российский IP/прокси).",
+                topic=topic,
+            )
         if not page.ok or not page.html:
             continue
         if "name=information" in url and "id=" not in url:
             for _title, href in _links_matching(page.html, origin, markers):
-                if href not in candidates:
-                    candidates.insert(candidates.index(url) + 1, href)
+                if href not in seen_pages and href not in queue:
+                    queue.insert(idx, href)
         if "name=info_court" in url and "rid=" not in url and "id=" not in url:
             for _title, href in _links_matching(
                 page.html, origin, markers + ("порядок", "общая информация", "структур", "реквизит")
             ):
-                if href not in candidates:
-                    candidates.insert(candidates.index(url) + 1, href)
+                if href not in seen_pages and href not in queue:
+                    queue.insert(idx, href)
         extracted = _extract_topic_block(page.html, topic)
         score = _score_extract(extracted, topic, page.url or url)
         if score > best_score:
             best_score = score
             best_text = extracted
             best_url = page.url or url
+        if best_score >= good_enough and len(best_text) >= 60:
+            return CourtInfoResult("found", best_text, source_url=best_url, topic=topic)
 
     if len(best_text) < 60:
-        return CourtInfoResult(
-            "not_found",
-            "На сайте суда не удалось выделить запрошенные сведения в типовых разделах "
-            f"(О суде / Справочная информация). Проверьте сайт напрямую: {origin}/",
-            source_url=origin + "/",
-            topic=topic,
-        )
+        return None
     return CourtInfoResult("found", best_text, source_url=best_url, topic=topic)
 
 
