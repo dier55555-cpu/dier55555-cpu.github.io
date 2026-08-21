@@ -27,6 +27,7 @@
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 from typing import Literal, Optional
 from urllib.parse import urljoin
@@ -73,6 +74,27 @@ class CaseQuery:
     case_number: Optional[str] = None
     case_uid: Optional[str] = None
     last_name: Optional[str] = None
+
+
+def normalize_case_number(raw: Optional[str]) -> Optional[str]:
+    """Клиент часто присылает «2-1248/2026 ~ М-52/2026» — sudrf по такому не ищет.
+
+    Оставляем основной номер производства (до «~» / «м-» / лишнего хвоста).
+    """
+    if not raw:
+        return None
+    text = str(raw).strip()
+    if not text:
+        return None
+    # «2-1248/2026 ~ М-52/2026» / «2-1248/2026~М-52/2026»
+    for sep in ("~", "～", "≈"):
+        if sep in text:
+            text = text.split(sep, 1)[0].strip()
+            break
+    # На всякий случай отрезаем хвост « М-52/2026» без тильды.
+    text = re.sub(r"\s+[МмM]\s*[-–—]?\s*\d+/\d+\s*$", "", text).strip()
+    text = re.sub(r"\s+", " ", text)
+    return text or None
 
 
 @dataclass
@@ -154,7 +176,9 @@ def search_case_direct(
     таймаут шлюза ~30с. Имена полей G1/U1 зафиксированы discover 20.08.2026.
     """
     prod = SUDRF_PRODUCTION.get(production_type) or SUDRF_PRODUCTION["civil_first_instance"]
-    if not query.case_number and not query.last_name:
+    case_number = normalize_case_number(query.case_number)
+    last_name = (query.last_name or "").strip() or None
+    if not case_number and not last_name:
         return CaseSearchResult("error", "Нужно указать case_number или last_name.")
 
     params = {
@@ -166,10 +190,10 @@ def search_case_direct(
         "new": "0",
         "delo_table": prod["table"],
     }
-    if query.case_number:
-        params[prod["case_number_field"]] = query.case_number
-    if query.last_name:
-        params[prod["last_name_field"]] = query.last_name
+    if case_number:
+        params[prod["case_number_field"]] = case_number
+    if last_name:
+        params[prod["last_name_field"]] = last_name
 
     search_url = f"https://{domain}/modules.php"
     fetch_result = fetcher.request("GET", search_url, params=params, respect_robots=False)
@@ -200,6 +224,8 @@ def search_case_direct(
             "(сайт суда мог обновить вёрстку).",
         )
 
+    # Полная карточка — второй HTTP. Если канал уже медленный, отдаём hit+ссылку,
+    # чтобы уложиться в Caddy ~30с (Анна иначе получает 504 и говорит «не нашла»).
     cards = _hydrate_case_cards(fetcher, hits, limit=1, respect_robots=False)
     if not cards:
         return CaseSearchResult("not_found", "По заданным критериям дел не найдено.")
@@ -291,7 +317,11 @@ def _hydrate_case_cards(
     limit: int = 3,
     respect_robots: bool = True,
 ) -> list[CaseCard]:
-    """По одному-трём делам из выдачи подтягиваем полную карточку (движение/стороны)."""
+    """По одному-трём делам из выдачи подтягиваем полную карточку (движение/стороны).
+
+    При таймауте/ошибке второго запроса возвращаем hit со ссылкой на карточку —
+    лучше краткий found, чем 504 у Анны.
+    """
     if not hits:
         return []
     detailed: list[CaseCard] = []
@@ -301,6 +331,7 @@ def _hydrate_case_cards(
             continue
         page = fetcher.get(hit.case_url, respect_robots=respect_robots)
         if page.blocked or not page.ok or not page.html:
+            # Hit уже полезен: номер + URL карточки.
             detailed.append(hit)
             continue
         cards = parse_case_cards(page.html)

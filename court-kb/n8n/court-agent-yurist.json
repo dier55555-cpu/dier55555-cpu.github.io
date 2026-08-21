@@ -12,18 +12,24 @@
       "name": "Webhook",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2,
-      "position": [0, 300],
+      "position": [
+        0,
+        300
+      ],
       "webhookId": "court-agent-yurist"
     },
     {
       "parameters": {
-        "jsCode": "// n8n сам на sudrf не ходит. Два режима одного вебхука «Дело»:\n// 1) справка с сайта: website + topic (hours|contacts|structure|jurisdiction|duty|visitors|general)\n// 2) карточка дела: court_slug (6 Воронеж) + case_number|last_name\nconst API_BASE = 'http://77.222.55.230:8080';\nconst API_KEY = 'SET_COURT_KB_API_KEY';\n\nconst COURTS = {\n  'sovetsky-vrn': true,\n  'kominternovsky-vrn': true,\n  'zheleznodorozhny-vrn': true,\n  'levoberezhny-vrn': true,\n  'centralny-vrn': true,\n  'lensud-vrn': true,\n};\n\nconst raw = $input.first().json;\nconst body = raw.body && typeof raw.body === 'object' ? raw.body : raw;\nconst court_slug = String(body.court_slug || '').trim();\nconst case_number = String(body.case_number || '').trim();\nconst last_name = String(body.last_name || '').trim();\nconst website = String(body.website || body.site || body.sudrf_domain || '').trim();\nconst topic = String(body.topic || '').trim();\nconst mode = String(body.mode || '').trim().toLowerCase();\nconst production_type = String(body.production_type || 'civil_first_instance').trim();\n\nconst wantsInfo = mode === 'info' || mode === 'spravka' || mode === 'site'\n  || (website && !case_number && !last_name)\n  || (website && topic && topic.toLowerCase() !== 'case' && topic.toLowerCase() !== 'дело');\n\nif (wantsInfo) {\n  if (!website) {\n    return [{ json: { skipHttp: true, status: 'error', result: 'Для справки с сайта нужен website (поле САЙТ из Базы Знаний).' } }];\n  }\n  return [{ json: {\n    skipHttp: false,\n    apiUrl: API_BASE + '/delo',\n    apiKey: API_KEY,\n    payload: {\n      mode: 'info',\n      website,\n      topic: topic || 'hours',\n      court_slug: court_slug || null,\n      case_number: null,\n      last_name: null,\n    },\n  } }];\n}\n\nif (!court_slug || !COURTS[court_slug]) {\n  if (website) {\n    return [{ json: {\n      skipHttp: false,\n      apiUrl: API_BASE + '/delo',\n      apiKey: API_KEY,\n      payload: { mode: 'info', website, topic: topic || 'hours' },\n    } }];\n  }\n  return [{ json: { skipHttp: true, status: 'error', result: `Живая карточка дела только для: ${Object.keys(COURTS).join(', ')}. Для режима/контактов передайте website из БЗ.` } }];\n}\nif (!case_number && !last_name) {\n  return [{ json: { skipHttp: true, status: 'error', result: 'Нужно указать case_number или last_name (либо website+topic для справки).' } }];\n}\n\nreturn [{ json: {\n  skipHttp: false,\n  apiUrl: API_BASE + '/delo',\n  apiKey: API_KEY,\n  payload: {\n    mode: 'case',\n    court_slug,\n    case_number: case_number || null,\n    last_name: last_name || null,\n    production_type,\n  },\n} }];\n"
+        "jsCode": "// n8n сам на sudrf не ходит. Два режима одного вебхука «Дело»:\n// 1) справка с сайта: website + topic (hours|contacts|structure|jurisdiction|duty|visitors|general)\n// 2) карточка дела: court_slug (6 Воронеж) + case_number|last_name\nconst API_BASE = 'http://77.222.55.230:8080';\nconst API_KEY = 'SET_COURT_KB_API_KEY';\n\nconst COURTS = {\n  'sovetsky-vrn': true,\n  'kominternovsky-vrn': true,\n  'zheleznodorozhny-vrn': true,\n  'levoberezhny-vrn': true,\n  'centralny-vrn': true,\n  'lensud-vrn': true,\n};\n\nconst raw = $input.first().json;\nconst body = raw.body && typeof raw.body === 'object' ? raw.body : raw;\nconst court_slug = String(body.court_slug || '').trim();\nconst normalizeCaseNumber = (raw) => {\n  let t = String(raw || '').trim();\n  if (!t) return '';\n  for (const sep of ['~', '～', '≈']) {\n    if (t.includes(sep)) { t = t.split(sep)[0].trim(); break; }\n  }\n  t = t.replace(/\\s+[МмM]\\s*[-–—]?\\s*\\d+\\/\\d+\\s*$/u, '').trim();\n  return t;\n};\nconst case_number = normalizeCaseNumber(body.case_number);\nconst last_name = String(body.last_name || '').trim();\nconst website = String(body.website || body.site || body.sudrf_domain || '').trim();\nconst topic = String(body.topic || '').trim();\nconst mode = String(body.mode || '').trim().toLowerCase();\nconst production_type = String(body.production_type || 'civil_first_instance').trim();\n\nconst wantsInfo = mode === 'info' || mode === 'spravka' || mode === 'site'\n  || (website && !case_number && !last_name)\n  || (website && topic && topic.toLowerCase() !== 'case' && topic.toLowerCase() !== 'дело');\n\nif (wantsInfo) {\n  if (!website) {\n    return [{ json: { skipHttp: true, status: 'error', result: 'Для справки с сайта нужен website (поле САЙТ из Базы Знаний).' } }];\n  }\n  return [{ json: {\n    skipHttp: false,\n    apiUrl: API_BASE + '/delo',\n    apiKey: API_KEY,\n    payload: {\n      mode: 'info',\n      website,\n      topic: topic || 'hours',\n      court_slug: court_slug || null,\n      case_number: null,\n      last_name: null,\n    },\n  } }];\n}\n\nif (!court_slug || !COURTS[court_slug]) {\n  if (website) {\n    return [{ json: {\n      skipHttp: false,\n      apiUrl: API_BASE + '/delo',\n      apiKey: API_KEY,\n      payload: { mode: 'info', website, topic: topic || 'hours' },\n    } }];\n  }\n  return [{ json: { skipHttp: true, status: 'error', result: `Живая карточка дела только для: ${Object.keys(COURTS).join(', ')}. Для режима/контактов передайте website из БЗ.` } }];\n}\nif (!case_number && !last_name) {\n  return [{ json: { skipHttp: true, status: 'error', result: 'Нужно указать case_number или last_name (либо website+topic для справки).' } }];\n}\n\nreturn [{ json: {\n  skipHttp: false,\n  apiUrl: API_BASE + '/delo',\n  apiKey: API_KEY,\n  payload: {\n    mode: 'case',\n    court_slug,\n    case_number: case_number || null,\n    last_name: last_name || null,\n    production_type,\n  },\n} }];\n"
       },
       "id": "build-query",
       "name": "Подготовить запрос",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [240, 300]
+      "position": [
+        240,
+        300
+      ]
     },
     {
       "parameters": {
@@ -40,7 +46,10 @@
       "name": "Ошибка валидации?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 1,
-      "position": [480, 300]
+      "position": [
+        480,
+        300
+      ]
     },
     {
       "parameters": {
@@ -63,7 +72,7 @@
         "specifyBody": "json",
         "jsonBody": "={{ JSON.stringify($json.payload) }}",
         "options": {
-          "timeout": 50000,
+          "timeout": 55000,
           "response": {
             "response": {
               "neverError": true
@@ -75,7 +84,10 @@
       "name": "POST /delo (Python VPS)",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [720, 180]
+      "position": [
+        720,
+        180
+      ]
     },
     {
       "parameters": {
@@ -85,7 +97,10 @@
       "name": "Разобрать ответ API",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [960, 180]
+      "position": [
+        960,
+        180
+      ]
     },
     {
       "parameters": {
@@ -97,7 +112,10 @@
       "name": "Ответ (из API)",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.1,
-      "position": [1200, 180]
+      "position": [
+        1200,
+        180
+      ]
     },
     {
       "parameters": {
@@ -109,7 +127,10 @@
       "name": "Ответ (ошибка валидации)",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.1,
-      "position": [720, 420]
+      "position": [
+        720,
+        420
+      ]
     }
   ],
   "connections": {

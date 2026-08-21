@@ -17,7 +17,13 @@ from urllib.parse import urlparse
 from fastapi import FastAPI, Header, HTTPException
 from pydantic import BaseModel
 
-from scraper.case_lookup.search import CaseQuery, VORONEZH_SUDRF_COURTS, search_case_direct
+from scraper.case_lookup.search import (
+    CaseQuery,
+    CaseSearchResult,
+    VORONEZH_SUDRF_COURTS,
+    normalize_case_number,
+    search_case_direct,
+)
 from scraper.court_info import fetch_court_info, normalize_topic, website_to_origin
 from scraper.fetch import Fetcher
 from scraper.proxy_pool import proxies_from_env
@@ -27,9 +33,34 @@ log = logging.getLogger("delo")
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 
 _last_good_proxy: Optional[str] = None
+_LAST_GOOD_PROXY_PATH = "/opt/court-kb/.last_good_proxy"
 # Кэш справок (website+topic), чтобы повтор Анны не долбил sudrf и не ловил TCP-ban.
 _spravka_cache: dict[tuple[str, str], tuple[float, object]] = {}
 _SPRAVKA_CACHE_TTL_SEC = 1800.0
+
+
+def _load_last_good_proxy() -> None:
+    global _last_good_proxy
+    try:
+        with open(_LAST_GOOD_PROXY_PATH, encoding="utf-8") as f:
+            raw = f.read().strip()
+        if raw.startswith("http"):
+            _last_good_proxy = raw
+    except OSError:
+        pass
+
+
+def _save_last_good_proxy(url: str) -> None:
+    global _last_good_proxy
+    _last_good_proxy = url
+    try:
+        with open(_LAST_GOOD_PROXY_PATH, "w", encoding="utf-8") as f:
+            f.write(url)
+    except OSError:
+        pass
+
+
+_load_last_good_proxy()
 
 
 def _ordered_proxies() -> list[str]:
@@ -99,7 +130,7 @@ def _spravka_with_fallback(website: str, topic: str):
         last_result, last_fetcher = result, fetcher
         if result.status == "found":
             if channel:
-                _last_good_proxy = channel
+                _save_last_good_proxy(channel)
                 used = channel
             _spravka_cache[cache_key] = (now, result)
             return result, fetcher, used
@@ -111,14 +142,13 @@ def _spravka_with_fallback(website: str, topic: str):
 
 
 def _remember_proxy(fetcher: Optional[Fetcher], ok: bool) -> str:
-    global _last_good_proxy
     used = ""
     if fetcher is None:
         return used
     if fetcher.proxy_urls:
         used = fetcher.proxy_urls[fetcher._proxy_index % len(fetcher.proxy_urls)]
     if ok and used:
-        _last_good_proxy = used
+        _save_last_good_proxy(used)
     return used
 
 
@@ -188,7 +218,7 @@ def delo_lookup(payload: CaseLookupRequest, x_api_key: Optional[str] = Header(de
 
     website = (payload.website or "").strip() or None
     topic = (payload.topic or "").strip() or None
-    case_number = (payload.case_number or "").strip() or None
+    case_number = normalize_case_number(payload.case_number)
     last_name = (payload.last_name or "").strip() or None
     mode = (payload.mode or "").strip().lower()
 
@@ -218,22 +248,62 @@ def delo_lookup(payload: CaseLookupRequest, x_api_key: Optional[str] = Header(de
     if not case_number and not last_name:
         return CaseLookupResponse(status="error", result="Нужно указать case_number или last_name.")
 
-    fetcher = _make_fetcher()
     t0 = time.monotonic()
-    result = search_case_direct(
-        fetcher,
+    result, used = _case_with_channels(
         domain,
         CaseQuery(case_number=case_number, last_name=last_name),
         production_type=payload.production_type,
     )
-    used = _remember_proxy(fetcher, result.status in {"found", "not_found"})
     log.info(
         "delo slug=%s q=%s status=%s port=%s dt=%.2fs",
         payload.court_slug,
         case_number or last_name,
         result.status,
-        _proxy_port(used) if used else "-",
+        _proxy_port(used) if used else "direct",
         time.monotonic() - t0,
     )
     text = result.as_text() if result.status == "found" else result.message
     return CaseLookupResponse(status=result.status, result=text)
+
+
+def _case_with_channels(domain: str, query: CaseQuery, production_type: str):
+    """Карточка: last_good (с диска) + до 4 sticky. Короткий timeout, быстрый fail-over.
+
+    Caddy ~30с. Бюджет ~24с. Рабочий порт запоминаем в файл между рестартами.
+    """
+    channels = _ordered_proxies()[:4]
+    last_result = None
+    used = ""
+    t_budget = time.monotonic() + 24.0
+    for channel in channels:
+        if time.monotonic() >= t_budget:
+            break
+        remaining = max(3.5, t_budget - time.monotonic())
+        timeout = min(8.0, remaining)
+        fetcher = Fetcher(
+            proxy_urls=[channel],
+            delay_range=(0.0, 0.0),
+            timeout=timeout,
+            max_retries=1,
+        )
+        result = search_case_direct(
+            fetcher,
+            domain,
+            query,
+            production_type=production_type,
+        )
+        last_result = result
+        used = channel
+        if result.status in {"found", "not_found"}:
+            if result.status == "found":
+                _save_last_good_proxy(channel)
+            return result, used
+    if last_result is None:
+        return (
+            CaseSearchResult(
+                "error",
+                "Сайт суда временно недоступен через прокси. Попробуйте ещё раз.",
+            ),
+            used,
+        )
+    return last_result, used

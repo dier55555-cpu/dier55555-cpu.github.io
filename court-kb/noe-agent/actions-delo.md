@@ -44,12 +44,17 @@ Body:
 
 court_slug: sovetsky-vrn | kominternovsky-vrn | zheleznodorozhny-vrn | levoberezhny-vrn | centralny-vrn | lensud-vrn (все г. Воронеж).
 
+Важно по номеру: передавай только основной номер вида `2-1248/2026`.
+Хвост `~ М-52/2026` (материал) в case_number не включай — из‑за него поиск на сайте суда ничего не находит.
+
 Примеры:
 1) {"mode":"case","court_slug":"sovetsky-vrn","case_number":"2-123/2025","last_name":""}
 2) {"mode":"case","court_slug":"kominternovsky-vrn","case_number":"","last_name":"Иванов"}
+3) Клиент написал «2-1248/2026 ~ М-52/2026» → в Дело: "case_number":"2-1248/2026"
 
 Суд не из списка → карточку не ищи; для справки используй Режим А с website из БЗ.
 status error/not_found → не выдумывай карточку, дай сайт суда.
+status found → ответь клиенту по result (движение, стороны, даты), не говори что «сайт не отвечает».
 
 ## HTTP в кабинете Нои (критично)
 
