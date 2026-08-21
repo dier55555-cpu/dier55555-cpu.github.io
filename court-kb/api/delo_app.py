@@ -278,19 +278,20 @@ def delo_lookup(payload: CaseLookupRequest, x_api_key: Optional[str] = Header(de
 
 
 def _case_with_channels(domain: str, query: CaseQuery, production_type: str):
-    """Карточка: last_good (с диска) + до 4 sticky. Короткий timeout, быстрый fail-over.
+    """Карточка: last_good (с диска) + до 4 sticky.
 
-    Caddy ~30с. Бюджет ~24с. Рабочий порт запоминаем в файл между рестартами.
+    Нужны 2 HTTP (поиск + полная карточка). Caddy/n8n ~45–55с, бюджет ~28с,
+    на один запрос до 13с — иначе гидрация карточки падает в «только hit поиска».
     """
     channels = _ordered_proxies()[:4]
     last_result = None
     used = ""
-    t_budget = time.monotonic() + 24.0
+    t_budget = time.monotonic() + 28.0
     for channel in channels:
         if time.monotonic() >= t_budget:
             break
-        remaining = max(3.5, t_budget - time.monotonic())
-        timeout = min(8.0, remaining)
+        remaining = max(4.0, t_budget - time.monotonic())
+        timeout = min(13.0, remaining)
         fetcher = Fetcher(
             proxy_urls=[channel],
             delay_range=(0.0, 0.0),

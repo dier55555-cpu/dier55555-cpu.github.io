@@ -33,7 +33,15 @@ from urllib.parse import urljoin
 
 from ..fetch import Fetcher
 from .captcha import CaptchaSolver
-from .case_card import CaseCard, format_case_card, looks_like_not_found, looks_like_wrong_captcha, parse_case_cards, parse_search_hits
+from .case_card import (
+    CaseCard,
+    format_case_card,
+    format_case_cards,
+    looks_like_not_found,
+    looks_like_wrong_captcha,
+    parse_case_cards,
+    parse_search_hits,
+)
 from .case_number import normalize_case_number
 from .forms import SearchFormInfo, parse_search_form
 
@@ -86,7 +94,7 @@ class CaseSearchResult:
 
     def as_text(self) -> str:
         if self.status == "found":
-            return "\n\n---\n\n".join(format_case_card(c) for c in self.cases) or self.message
+            return format_case_cards(self.cases) or self.message
         return self.message
 
 
@@ -203,15 +211,29 @@ def search_case_direct(
             "(сайт суда мог обновить вёрстку).",
         )
 
-    # Полная карточка — второй HTTP. Если канал уже медленный, отдаём hit+ссылку,
-    # чтобы уложиться в Caddy ~30с (Анна иначе получает 504 и говорит «не нашла»).
-    cards = _hydrate_case_cards(fetcher, hits, limit=1, respect_robots=False)
+    # Полная карточка — второй HTTP. По номеру обычно 1 дело; по фамилии — до 2,
+    # чтобы уложиться в бюджет шлюза (~28с) при 2×HTTP на карточку.
+    if last_name and not case_number:
+        hydrate_limit = min(2, len(hits))
+    else:
+        hydrate_limit = min(2, max(1, len(hits)))
+    cards = _hydrate_case_cards(fetcher, hits, limit=hydrate_limit, respect_robots=False)
     if not cards:
         return CaseSearchResult("not_found", "По заданным критериям дел не найдено.")
-    extra = max(0, len(hits) - 1)
-    if extra:
+    if case_number:
+        for card in cards:
+            if "ЕЩЁ РЕЗУЛЬТАТЫ" in card.sections:
+                continue
+            # В выдаче часто «2-1248/2026 ~ М-52/2026» — в карточке отдаём канон.
+            card.case_number = case_number
+    shown = len([c for c in cards if "ЕЩЁ РЕЗУЛЬТАТЫ" not in c.sections])
+    remaining = max(0, len(hits) - shown)
+    if remaining:
         cards.append(CaseCard(sections={"ЕЩЁ РЕЗУЛЬТАТЫ": [
-            {"сообщение": f"Найдено ещё {extra} дел(а) по этим критериям — уточните номер дела, чтобы увидеть конкретное."}
+            {"сообщение": (
+                f"Найдено дел: {len(hits)}. Показаны полные карточки: {shown}. "
+                "Уточните номер дела, чтобы открыть конкретное, или повторите запрос."
+            )}
         ]}))
     return CaseSearchResult("found", "Найдено", cases=cards)
 
