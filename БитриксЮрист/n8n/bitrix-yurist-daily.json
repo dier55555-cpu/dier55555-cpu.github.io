@@ -1,0 +1,76 @@
+{
+  "name": "БитриксЮрист — ежедневный обход сделок",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 6 * * *"
+            }
+          ]
+        }
+      },
+      "id": "schedule-bitrix-yurist",
+      "name": "Каждое утро 06:00 МСК",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [0, 300]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "bitrix-yurist-daily",
+        "responseMode": "onReceived",
+        "options": {}
+      },
+      "id": "webhook-bitrix-yurist",
+      "name": "Ручной запуск (не court-agent-yurist)",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [0, 520],
+      "webhookId": "bitrix-yurist-daily"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ ($env.BITRIX_YURIST_URL || 'http://127.0.0.1:8081') + '/run' }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-API-Key",
+              "value": "={{$env.BITRIX_YURIST_API_KEY}}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "id": "kick-python",
+      "name": "Старт Python БитриксЮрист",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [280, 400]
+    }
+  ],
+  "connections": {
+    "Каждое утро 06:00 МСК": {
+      "main": [[{ "node": "Старт Python БитриксЮрист", "type": "main", "index": 0 }]]
+    },
+    "Ручной запуск (не court-agent-yurist)": {
+      "main": [[{ "node": "Старт Python БитриксЮрист", "type": "main", "index": 0 }]]
+    }
+  },
+  "settings": {
+    "timezone": "Europe/Moscow",
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "meta": {
+    "templateCredsSetupCompleted": true
+  },
+  "pinData": {}
+}
