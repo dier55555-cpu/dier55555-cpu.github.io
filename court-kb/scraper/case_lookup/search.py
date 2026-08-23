@@ -183,16 +183,30 @@ def search_case_direct(
         params[prod["last_name_field"]] = last_name
 
     search_url = f"https://{domain}/modules.php"
+    # Referer как у браузера после открытия формы поиска — меньше ложных отказов WAF.
+    if hasattr(fetcher, "session"):
+        fetcher.session.headers["Referer"] = (
+            f"https://{domain}/modules.php?name=sud_delo&name_op=sf"
+            f"&delo_id={prod['delo_id']}&srv_num=1"
+        )
     fetch_result = fetcher.request("GET", search_url, params=params, respect_robots=False)
     if fetch_result.blocked:
         return CaseSearchResult("blocked", (
             "Сайт суда заблокировал запрос (нужен российский IP/прокси)."
         ))
     if not fetch_result.ok or not fetch_result.html:
+        code = fetch_result.status_code
+        if code and code >= 500:
+            return CaseSearchResult(
+                "error",
+                f"Раздел «Судебное делопроизводство» на сайте суда отвечает ошибкой "
+                f"HTTP {code}. Это сбой/перегрузка ГАС, не номер дела. Попробуйте позже.",
+            )
         return CaseSearchResult(
             "error",
-            "Сайт суда временно недоступен через прокси (не ответил вовремя). "
-            "Попробуйте задать вопрос ещё раз.",
+            "Раздел «Судебное делопроизводство» на сайте суда сейчас не отвечает "
+            "(таймаут при поиске дела). Обычная главная суда при этом может открываться. "
+            "Попробуйте задать вопрос ещё раз чуть позже.",
         )
 
     html = fetch_result.html
@@ -205,10 +219,12 @@ def search_case_direct(
 
     hits = parse_search_hits(html, fetch_result.url or search_url)
     if not hits:
+        # Часто ГАС отдаёт «оболочку» сайта без #tablcont — модуль sud_delo лежит.
         return CaseSearchResult(
             "error",
-            "Страница результатов получена, но структура не распознана "
-            "(сайт суда мог обновить вёрстку).",
+            "Сайт суда открылся, но таблица результатов поиска дел не пришла "
+            "(раздел «Судебное делопроизводство» временно не отдаёт выдачу). "
+            "Попробуйте позже или откройте поиск на сайте суда вручную.",
         )
 
     # Полная карточка — второй HTTP. По номеру обычно 1 дело; по фамилии — до 2,

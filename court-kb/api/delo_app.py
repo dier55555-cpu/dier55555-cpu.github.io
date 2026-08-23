@@ -278,26 +278,41 @@ def delo_lookup(payload: CaseLookupRequest, x_api_key: Optional[str] = Header(de
 
 
 def _case_with_channels(domain: str, query: CaseQuery, production_type: str):
-    """Карточка: last_good (с диска) + до 4 sticky.
+    """Карточка: last_good + остальные sticky, затем direct.
 
-    Нужны 2 HTTP (поиск + полная карточка). Caddy/n8n ~45–55с, бюджет ~28с,
-    на один запрос до 13с — иначе гидрация карточки падает в «только hit поиска».
+    Модуль sud_delo на ГАС часто подвисает (обычные страницы суда при этом живы).
+    Короткий connect-timeout, быстрый перебор портов. Бюджет ≤50с под n8n 55с.
+    Нужны до 2 HTTP (поиск + гидрация карточки) на успешном канале.
     """
-    channels = _ordered_proxies()[:4]
+    channels: list[Optional[str]] = list(_ordered_proxies()[:8])
+    # Прямой IP VPS — запасной канал: главная суда с него открывается.
+    channels.append(None)
     last_result = None
     used = ""
-    t_budget = time.monotonic() + 28.0
+    t_budget = time.monotonic() + 50.0
     for channel in channels:
         if time.monotonic() >= t_budget:
             break
-        remaining = max(4.0, t_budget - time.monotonic())
-        timeout = min(13.0, remaining)
-        fetcher = Fetcher(
-            proxy_urls=[channel],
-            delay_range=(0.0, 0.0),
-            timeout=timeout,
-            max_retries=1,
-        )
+        remaining = max(5.0, t_budget - time.monotonic())
+        # (connect, read): не ждать 20с на мёртвом туннеле.
+        read_timeout = min(18.0, remaining)
+        timeout = (4.0, read_timeout)
+        if channel is None:
+            fetcher = Fetcher(
+                proxy_urls=[],
+                delay_range=(0.0, 0.0),
+                timeout=timeout,
+                max_retries=1,
+            )
+            used_label = ""
+        else:
+            fetcher = Fetcher(
+                proxy_urls=[channel],
+                delay_range=(0.0, 0.0),
+                timeout=timeout,
+                max_retries=1,
+            )
+            used_label = channel
         result = search_case_direct(
             fetcher,
             domain,
@@ -305,16 +320,18 @@ def _case_with_channels(domain: str, query: CaseQuery, production_type: str):
             production_type=production_type,
         )
         last_result = result
-        used = channel
+        used = used_label
         if result.status in {"found", "not_found"}:
-            if result.status == "found":
+            if result.status == "found" and channel:
                 _save_last_good_proxy(channel)
             return result, used
     if last_result is None:
         return (
             CaseSearchResult(
                 "error",
-                "Сайт суда временно недоступен через прокси. Попробуйте ещё раз.",
+                "Раздел «Судебное делопроизводство» на сайте суда сейчас не отвечает "
+                "(поиск дел / карточка). Обычные страницы суда могут открываться. "
+                "Попробуйте позже или откройте карточку вручную на сайте суда.",
             ),
             used,
         )
