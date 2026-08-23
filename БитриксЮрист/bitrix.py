@@ -130,11 +130,18 @@ def normalize_slug(raw: Any) -> Optional[str]:
             return slug
     aliases = {
         "советск": "sovetsky-vrn",
+        "sovetsky": "sovetsky-vrn",
         "коминтерн": "kominternovsky-vrn",
+        "komintern": "kominternovsky-vrn",
         "железнодорож": "zheleznodorozhny-vrn",
+        "zheleznodorozh": "zheleznodorozhny-vrn",
         "левобереж": "levoberezhny-vrn",
+        "levoberezh": "levoberezhny-vrn",
         "центральн": "centralny-vrn",
+        "centraln": "centralny-vrn",
         "ленинск": "lensud-vrn",
+        "leninsk": "lensud-vrn",
+        "lensud": "lensud-vrn",
     }
     for needle, slug in aliases.items():
         if needle in text:
@@ -154,7 +161,7 @@ def pull_deals() -> list[Deal]:
         data = _call("crm.deal.list", {
             "filter": filter_,
             "select": [
-                "ID", "TITLE", "STAGE_ID", "CONTACT_ID",
+                "ID", "TITLE", "STAGE_ID", "CONTACT_ID", "COMMENTS",
                 UF_CASE_NUMBER, UF_COURT_SLUG, UF_SNAPSHOT_HASH, "UF_*",
             ],
             "start": start,
@@ -172,7 +179,8 @@ def pull_deals() -> list[Deal]:
                 stage_id=item.get("STAGE_ID") or "",
                 contact_id=int(item["CONTACT_ID"]) if item.get("CONTACT_ID") else None,
                 case_number=str(case_number).strip(),
-                court_slug=normalize_slug(item.get(UF_COURT_SLUG)),
+                court_slug=normalize_slug(item.get(UF_COURT_SLUG))
+                or normalize_slug(item.get("COMMENTS")),
                 snapshot_hash=str(item.get(UF_SNAPSHOT_HASH) or "") or None,
                 raw=item,
             ))
@@ -187,7 +195,7 @@ def pull_deals() -> list[Deal]:
 
 
 def lookup_delo(deal: Deal) -> dict[str, Any]:
-    """Тот же контракт, что у Анны: POST /delo mode=case. API Анны не меняем."""
+    """Тот же контракт, что у Анны: POST /delo. Своя копия на :8081, с ретраями."""
     if not deal.court_slug or deal.court_slug not in VORONEZH_SLUGS:
         return {"status": "skipped", "result": "Нет court_slug из пилота (6 судов Воронежа)"}
     headers = {"Content-Type": "application/json"}
@@ -200,12 +208,29 @@ def lookup_delo(deal: Deal) -> dict[str, Any]:
         "last_name": None,
         "production_type": "civil_first_instance",
     }
-    resp = requests.post(f"{COURT_KB_API_URL}/delo", json=payload, headers=headers, timeout=90)
-    try:
-        body = resp.json()
-    except ValueError:
-        return {"status": "error", "result": f"Парсер вернул не JSON HTTP {resp.status_code}"}
-    return body if isinstance(body, dict) else {"status": "error", "result": body}
+    last: dict[str, Any] = {"status": "error", "result": "парсер не ответил"}
+    for attempt in range(2):
+        try:
+            resp = requests.post(
+                f"{COURT_KB_API_URL}/delo",
+                json=payload,
+                headers=headers,
+                timeout=120,
+            )
+            body = resp.json()
+        except (ValueError, requests.RequestException) as exc:
+            last = {"status": "error", "result": f"сеть/JSON: {exc}"}
+            time.sleep(2 * (attempt + 1))
+            continue
+        if not isinstance(body, dict):
+            last = {"status": "error", "result": body}
+            continue
+        last = body
+        if body.get("status") in {"found", "not_found", "skipped"}:
+            return body
+        logger.warning("Parser attempt %s for deal %s: %s", attempt + 1, deal.id, body.get("result"))
+        time.sleep(2 * (attempt + 1))
+    return last
 
 
 def card_digest(parsed: dict[str, Any]) -> tuple[str, str]:
@@ -310,6 +335,7 @@ def run_daily_job() -> dict[str, int]:
                     f"Клиенту формулировку «дело обновлено» не писать."
                 )
                 if not DRY_RUN:
+                    push_fields(deal.id, f"{status}: {parsed.get('result')}", "", checked_at)
                     comment_timeline(deal.id, note)
             time.sleep(PAUSE_BETWEEN_DEALS_SEC)
             continue
