@@ -278,6 +278,11 @@ def format_comment(deal: Deal, parsed: dict[str, Any], changed: bool, checked_at
 
 def run_daily_job() -> dict[str, int]:
     stats = {"total": 0, "changed": 0, "unchanged": 0, "errors": 0, "skipped": 0}
+    if not BITRIX_WEBHOOK_URL or "YOUR_PORTAL" in BITRIX_WEBHOOK_URL:
+        logger.warning(
+            "BITRIX_WEBHOOK_URL не задан — прогон пропущен (каркас на VPS готов, ждём входящий вебхук)."
+        )
+        return stats
     hashes = load_local_hashes()
     deals = pull_deals()
     stats["total"] = len(deals)
