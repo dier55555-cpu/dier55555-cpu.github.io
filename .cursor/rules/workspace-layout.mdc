@@ -1,0 +1,12 @@
+---
+description: Всё под Cursor/; Ноя vs другие
+alwaysApply: true
+---
+
+# Workspace layout
+
+- Все проекты агента — **только** внутри `Cursor/`. Не создавать лишние папки в корне.
+- **Ноя** → `Cursor/noya/projects/<имя>/`. Перед работой читай `Cursor/noya/_shared/`.
+- **Всё остальное** → `Cursor/другие/<имя>/`. Инструкции Нои туда **не** применять.
+- Известно: Анна = `Cursor/noya/projects/anna/`; юристы = `Cursor/другие/юристы/`.
+- Подробности: `Cursor/AGENTS.md`.
