@@ -27,21 +27,24 @@
 **n8n / Ноя для этого проекта не нужны.**  
 Будильник и Битрикс REST — на том же VPS. Парсер — **своя копия** `/opt/bitrix-delo:8081`. Ноя только для чата Анны; `court-agent-yurist` не трогаем, новый n8n не заводим.
 
-**Парсер — своя копия, не Аннин процесс.**  
-На VPS: `/opt/bitrix-delo` (порт **8081**, только localhost) = копия рабочего `/opt/court-kb`.  
-Анна: `/opt/court-kb` на **8080** — без изменений. Прокси и `.env` скопированы. БитриксЮрист бьёт в `127.0.0.1:8081/delo`.
+**Парсер — своя копия + справочник судов РФ.**  
+На VPS: `/opt/bitrix-delo` (порт **8081**) = копия парсера + `directory/courts-ru.json` (~10k судов и мировых).  
+Анна: `/opt/court-kb` на **8080** — без изменений.
+
+Перед поиском дела БитриксЮрист всегда вызывает `POST /court_lookup` по полям регион/город/район/название и подставляет официальный сайт из БЗ (ошибка менеджера в slug не критична).
+
+Мировые (`*.msudrf.ru`): SSL hostname mismatch обходим (`verify=False` только для msudrf). На `sud_delo` почти всегда капча → статус `captcha_required` (нужен `TWOCAPTCHA_API_KEY`).
 
 ```json
 {
   "mode": "case",
-  "court_slug": "sovetsky-vrn",
-  "case_number": "2-1248/2026",
-  "last_name": null,
-  "production_type": "civil_first_instance"
+  "website": "https://sovetsk8.vrn.msudrf.ru",
+  "case_number": "2-1/2026",
+  "region": "Воронежская область",
+  "city": "Воронеж",
+  "court_name": "судебный участок 8 Советский"
 }
 ```
-
-Ответ тот же `{status, result}`. Пилот карточки — 6 райсудов Воронежа (как в скопированном коде).
 
 ---
 
@@ -62,20 +65,17 @@
 VPS sudrf-parser
 
   /opt/court-kb          :8080   ← Анна (не трогаем)
-  /opt/bitrix-delo       :8081   ← КОПИЯ парсера для БитриксЮриста
-  /opt/bitrix-yurist             ← обход Битрикс + timer 06:00
+  /opt/bitrix-delo       :8081   ← КОПИЯ парсера + БЗ судов РФ
+  /opt/bitrix-yurist             ← Битрикс + timer 06:00
 
-  systemd timer  БитриксЮрист  06:00 MSK
-        │
-        ▼
   bitrix.py
-        │  crm.deal.list / update / timeline.comment  → Битрикс
-        │  POST http://127.0.0.1:8081/delo            → своя копия парсера
+        │  crm.deal.list
+        │  POST /court_lookup  → сайт суда из справочника
+        │  POST /delo          → карточка дела (sudrf / msudrf)
+        │  crm.deal.update + timeline.comment
         ▼
   карточка сделки
 ```
-
-Ноя/n8n в этом контуре не участвуют.
 
 ---
 
@@ -111,7 +111,7 @@ POST {BITRIX_WEBHOOK_URL}/crm.timeline.comment.add.json
 ### Шаг 0. Не ломать Анну
 
 - Не открывать и не сохранять `court-agent-yurist`.
-- Не менять systemd `court-kb-delo`, пока не понадобится новый эндпоинт — MVP только читает `/delo`.
+- Не менять systemd `court-kb-delo` и код `/opt/court-kb`.
 - Не менять промпт/агента «Анна».
 
 ### Шаг 1. Снять с портала (без этого код не живой)
@@ -129,7 +129,7 @@ POST {BITRIX_WEBHOOK_URL}/crm.timeline.comment.add.json
 
 ### Шаг 3. Подключить тот же парсер
 
-Python вызывает `POST {COURT_KB_API_URL}/delo` с `X-API-Key` как у Анны.  
+Python вызывает `POST http://127.0.0.1:8081/delo` (копия парсера).  
 Маппинг суда: поле сделки → один из slug:
 
 `sovetsky-vrn`, `kominternovsky-vrn`, `zheleznodorozhny-vrn`, `levoberezhny-vrn`, `centralny-vrn`, `lensud-vrn`.
@@ -138,9 +138,9 @@ Python вызывает `POST {COURT_KB_API_URL}/delo` с `X-API-Key` как у 
 
 ### Шаг 4. Расписание на том же VPS
 
-Юнит `deploy/bitrix-yurist.timer`: `OnCalendar=*-*-* 06:00:00`, `WorkingDirectory` рядом с парсером.  
-Ручной прогон: `systemctl start bitrix-yurist.service`.  
-Порт `8081` нужен только если хотите HTTP `/run` / `/health`; для cron достаточно `python3 bitrix.py`. Аннин `:8080` не трогаем.
+Юнит `deploy/bitrix-yurist.timer`: `OnCalendar=*-*-* 06:00:00`.  
+Парсер БитриксЮриста: `bitrix-delo.service` на **8081**. Аннин **8080** не трогаем.  
+Ручной прогон: `systemctl start bitrix-yurist.service`.
 
 ### Шаг 5. Пилот
 
