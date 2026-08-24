@@ -23,4 +23,14 @@ python -m scraper.directory.from_sheets --download # свежая выгрузк
 
 На VPS: скопировать `directory/courts-ru.json` в `/opt/bitrix-delo/directory/` и `systemctl restart bitrix-delo`.
 
+## Капча мировых (2captcha)
+
+В `/opt/bitrix-delo/.env`:
+
+```bash
+TWOCAPTCHA_API_KEY=...
+```
+
+Пакет: `pip install 2captcha-python` в venv bitrix-delo. Gate `kcaptchaForm` решается автоматически; ответ POST в windows-1251.
+
 План: [PLAN.md](PLAN.md)
