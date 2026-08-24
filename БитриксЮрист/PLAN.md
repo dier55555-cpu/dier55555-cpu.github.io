@@ -31,6 +31,11 @@
 На VPS: `/opt/bitrix-delo` (порт **8081**) = копия парсера + `directory/courts-ru.json` (~10k судов и мировых).  
 Анна: `/opt/court-kb` на **8080** — без изменений.
 
+Справочник собирается из ваших Google Sheets (живые `https://…--….sudrf.ru/` и `https://….msudrf.ru/`), не из DaData:
+[суды РФ](https://docs.google.com/spreadsheets/d/19sxmrNDDHu0u-g4y3987g5hMMSdFh5VkKKmRRH-v2VU),
+[мировые](https://docs.google.com/spreadsheets/d/109ThgsNtz_pyaLu0RZonEqh0oN1ntS5OCbJAfH_M6HQ).
+Пересборка: `python -m scraper.directory.from_sheets [--download]`.
+
 Перед поиском дела БитриксЮрист всегда вызывает `POST /court_lookup` по полям регион/город/район/название и подставляет официальный сайт из БЗ (ошибка менеджера в slug не критична).
 
 Мировые (`*.msudrf.ru`): SSL hostname mismatch обходим (`verify=False` только для msudrf). На `sud_delo` почти всегда капча → статус `captcha_required` (нужен `TWOCAPTCHA_API_KEY`).

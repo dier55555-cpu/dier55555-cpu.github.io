@@ -6,4 +6,21 @@
 - `/opt/bitrix-yurist` — job: Битрикс → БЗ (регион/город/район/суд → сайт) → `/delo` → лента карточки
 - Аннин `/opt/court-kb:8080` не трогаем
 
+## Справочник судов
+
+Источник — Google Sheets (не DaData):
+
+- [Суды РФ](https://docs.google.com/spreadsheets/d/19sxmrNDDHu0u-g4y3987g5hMMSdFh5VkKKmRRH-v2VU)
+- [Мировые суды](https://docs.google.com/spreadsheets/d/109ThgsNtz_pyaLu0RZonEqh0oN1ntS5OCbJAfH_M6HQ)
+
+CSV-снимки: `parser-src/directory/sheets/`. Сборка JSON:
+
+```bash
+cd parser-src
+python -m scraper.directory.from_sheets            # из локальных CSV
+python -m scraper.directory.from_sheets --download # свежая выгрузка Sheets → CSV → JSON
+```
+
+На VPS: скопировать `directory/courts-ru.json` в `/opt/bitrix-delo/directory/` и `systemctl restart bitrix-delo`.
+
 План: [PLAN.md](PLAN.md)
