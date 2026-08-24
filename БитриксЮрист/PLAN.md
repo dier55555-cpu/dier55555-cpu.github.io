@@ -38,7 +38,7 @@
 
 Перед поиском дела БитриксЮрист всегда вызывает `POST /court_lookup` по полям регион/город/район/название и подставляет официальный сайт из БЗ (ошибка менеджера в slug не критична).
 
-Мировые (`*.msudrf.ru`): SSL hostname mismatch обходим (`verify=False` только для msudrf). На `sud_delo` почти всегда капча → статус `captcha_required` (нужен `TWOCAPTCHA_API_KEY`).
+Мировые (`*.msudrf.ru`): SSL hostname mismatch обходим (`verify=False` только для msudrf). На `sud_delo` почти всегда gate-капча (`kcaptchaForm`): решаем через `TWOCAPTCHA_API_KEY` (2captcha/rucaptcha), POST ответа в **windows-1251**.
 
 ```json
 {
