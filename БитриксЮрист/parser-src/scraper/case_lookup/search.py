@@ -153,6 +153,14 @@ def search_case(
 
 
 
+
+def _looks_like_search_form_only(html: str) -> bool:
+    """Форма поиска без таблицы результатов (частый ответ msudrf после «пустого» GET)."""
+    if "case_id=" in (html or ""):
+        return False
+    return "bookmark_type_1" in (html or "") or "g1_case__CASE_NUMBERSS" in (html or "")
+
+
 def _looks_captcha_gate(html: str) -> bool:
     low = (html or "").lower()
     return ("дополнительную проверку" in low and "captcha" in low) or (
@@ -165,8 +173,11 @@ def _pass_kcaptcha_gate(
     html: str,
     page_url: str,
     captcha_solver: CaptchaSolver,
-) -> CaseSearchResult | None:
-    """Решает /captcha.php и POST captcha-response (windows-1251). None = ok."""
+) -> tuple[CaseSearchResult | None, str | None]:
+    """Решает /captcha.php и POST captcha-response (windows-1251).
+
+    Returns (error, html_after). On success html_after is POST body (часто уже результаты).
+    """
     from urllib.parse import urljoin, urlparse, urlencode
 
     from bs4 import BeautifulSoup
@@ -179,13 +190,13 @@ def _pass_kcaptcha_gate(
         return CaseSearchResult(
             "captcha_required",
             "Сайт суда показывает капчу, но форма kcaptcha не найдена.",
-        )
+        ), None
     img = form.find("img")
     if img is None or not img.get("src"):
         return CaseSearchResult(
             "captcha_required",
             "Сайт суда показывает капчу, но картинка не найдена.",
-        )
+        ), None
     image_url = urljoin(page_url, img["src"])
     image_bytes = fetcher.get_bytes(image_url)
     if not image_bytes:
@@ -202,13 +213,13 @@ def _pass_kcaptcha_gate(
         except Exception:
             image_bytes = None
     if not image_bytes:
-        return CaseSearchResult("captcha_failed", f"Не удалось скачать капчу: {image_url}")
+        return CaseSearchResult("captcha_failed", f"Не удалось скачать капчу: {image_url}"), None
     try:
         code = captcha_solver.solve(image_bytes)
     except Exception as exc:  # noqa: BLE001
-        return CaseSearchResult("captcha_failed", f"2captcha: {exc}")
+        return CaseSearchResult("captcha_failed", f"2captcha: {exc}"), None
     if not code:
-        return CaseSearchResult("captcha_failed", "2captcha вернул пустой код.")
+        return CaseSearchResult("captcha_failed", "2captcha вернул пустой код."), None
 
     action = form.get("action") or page_url
     post_url = urljoin(page_url, action)
@@ -240,15 +251,15 @@ def _pass_kcaptcha_gate(
             allow_redirects=True,
         )
     except Exception as exc:  # noqa: BLE001
-        return CaseSearchResult("captcha_failed", f"POST капчи не удался: {exc}")
+        return CaseSearchResult("captcha_failed", f"POST капчи не удался: {exc}"), None
     html_out = ""
     try:
         html_out = resp.content.decode("cp1251", errors="replace")
     except Exception:
         html_out = resp.text or ""
     if _looks_captcha_gate(html_out):
-        return CaseSearchResult("captcha_failed", "Капча не принята сайтом (повторный gate).")
-    return None
+        return CaseSearchResult("captcha_failed", "Капча не принята сайтом (повторный gate)."), None
+    return None, html_out
 
 
 def search_case_direct(
@@ -270,19 +281,36 @@ def search_case_direct(
     if not case_number and not last_name:
         return CaseSearchResult("error", "Нужно указать case_number или last_name.")
 
-    params = {
-        "name": "sud_delo",
-        "srv_num": "1",
-        "name_op": "r",
-        "delo_id": str(prod["delo_id"]),
-        "case_type": "0",
-        "new": "0",
-        "delo_table": prod["table"],
-    }
-    if case_number:
-        params[prod["case_number_field"]] = case_number
-    if last_name:
-        params[prod["last_name_field"]] = last_name
+    host = (domain or "").lower()
+    is_ms = host.endswith(".msudrf.ru")
+
+    # Районные sudrf: классический name_op=r + G1_CASE__*.
+    # Мировые (тема 2.0): кнопка «Искать» собирает op=sf + g1_case__CASE_NUMBERSS.
+    if is_ms:
+        params = {
+            "name": "sud_delo",
+            "op": "sf",
+            "delo_id": str(prod["delo_id"]),
+        }
+        if case_number:
+            params["g1_case__CASE_NUMBERSS"] = case_number
+        if last_name:
+            # поле стороны на форме гражданских
+            params["G1_PARTS__NAMESS"] = last_name
+    else:
+        params = {
+            "name": "sud_delo",
+            "srv_num": "1",
+            "name_op": "r",
+            "delo_id": str(prod["delo_id"]),
+            "case_type": "0",
+            "new": "0",
+            "delo_table": prod["table"],
+        }
+        if case_number:
+            params[prod["case_number_field"]] = case_number
+        if last_name:
+            params[prod["last_name_field"]] = last_name
 
     from urllib.parse import urlencode as _urlencode
     search_url = f"https://{domain}/modules.php?{_urlencode(params)}"
@@ -314,11 +342,10 @@ def search_case_direct(
             )
         last_cap = None
         for _attempt in range(max(1, max_captcha_attempts)):
-            gate_err = _pass_kcaptcha_gate(fetcher, html, page_url, captcha_solver)
+            gate_err, html_after = _pass_kcaptcha_gate(fetcher, html, page_url, captcha_solver)
             if gate_err is not None:
                 last_cap = gate_err
                 if gate_err.status == "captcha_failed":
-                    # новая картинка — перезагрузим поиск
                     fetch_result = fetcher.request("GET", search_url, respect_robots=False)
                     if not fetch_result.ok or not fetch_result.html:
                         return last_cap
@@ -328,15 +355,25 @@ def search_case_direct(
                         break
                     continue
                 return gate_err
-            # gate пройден — повторяем поиск в той же сессии (cookies)
+            # POST капчи часто уже содержит выдачу — не теряем его вторым GET.
+            if html_after and not _looks_captcha_gate(html_after) and (
+                "case_id=" in html_after or not _looks_like_search_form_only(html_after)
+            ):
+                html = html_after
+                break
             fetch_result = fetcher.request("GET", search_url, respect_robots=False)
             if not fetch_result.ok or not fetch_result.html:
+                if html_after and not _looks_captcha_gate(html_after):
+                    html = html_after
+                    break
                 return CaseSearchResult(
                     "error",
                     "После капчи сайт суда не ответил. Попробуйте ещё раз.",
                 )
             html = fetch_result.html
             page_url = fetch_result.url or search_url
+            if html_after and "case_id=" in html_after and "case_id=" not in (html or ""):
+                html = html_after
             if _looks_captcha_gate(html):
                 last_cap = CaseSearchResult("captcha_failed", "После решения снова gate-капча.")
                 continue
@@ -351,7 +388,14 @@ def search_case_direct(
                 "captcha_required",
                 "Сайт суда показывает капчу (типично для мировых судей).",
             )
+    if _looks_like_search_form_only(html) and "case_id=" not in html:
+        return CaseSearchResult(
+            "error",
+            "Сайт мирового судьи вернул форму поиска без результатов. "
+            "Повторите запрос (нужна свежая капча на URL с номером дела).",
+        )
     if looks_like_not_found(html):
+
         return CaseSearchResult(
             "not_found",
             "По заданным критериям дел не найдено. Проверьте номер дела/фамилию "
