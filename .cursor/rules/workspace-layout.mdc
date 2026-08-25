@@ -1,14 +1,14 @@
 ---
-description: Всё под Cursor/; Ноя vs другие; кабинеты и ключи
+description: Projects = кабинеты → проекты; ключ на кабинет
 alwaysApply: true
 ---
 
 # Workspace layout
 
-- Все проекты агента — **только** внутри `Cursor/`. Не создавать лишних папок в корне.
-- **Ноя** → `Cursor/noya/projects/<имя>/`. Перед работой читай `Cursor/noya/_shared/`.
-- **Всё остальное** → `Cursor/другие/<имя>/`. Инструкции Нои туда **не** применять.
-- Несколько кабинетов Нои: один кабинет = одна папка = один секрет `NOYA_KEY_<SLUG>`. См. `Cursor/noya/_shared/cabinets-and-keys.md`.
-- Ною не класть в `~/.cursor/mcp.json`. Ключи не писать в git.
-- Известно: Анна = `Cursor/noya/projects/anna/` (`NOYA_KEY_DENDRIIT`); юристы = `Cursor/другие/юристы/`.
-- Подробности: `Cursor/AGENTS.md`.
+- Локальный корень: `/Users/user/Projects`. В репо зеркало: `Cursor/`.
+- **Кабинет** (профиль Нои) → папка верхнего уровня: `dendriit/`, `<cabinet>/`.
+- **Проект** → папка внутри кабинета. В кабинете проектов **несколько**.
+- ДендрИИт: проекты `anna/` и `bitrix-yurist/` — один кабинет, один секрет `NOYA_KEY_DENDRIIT`.
+- Анна ≠ кабинет. Битрикс-Юрист ≠ отдельный кабинет.
+- Ключ на кабинет; MCP в `<cabinet>/.cursor/mcp.json`; не в `~/.cursor/mcp.json`.
+- Гайд: `Cursor/_shared/cabinets-and-keys.md`. Правила: `Cursor/AGENTS.md`.

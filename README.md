@@ -2,18 +2,16 @@
 
 Публичная страница: корневой `index.html`.
 
-Все проекты агента — в одной папке **`Cursor/`**:
+Рабочие проекты агента зеркалятся в **`Cursor/`** по той же схеме, что локально в **`/Users/user/Projects`**:
 
 ```
-Cursor/
-  noya/                 # платформа Ноя
-    _shared/            # методология + cabinets-and-keys.md
-    projects/anna/      # кабинет ДендрИИт / Анна
-    projects/<slug>/    # другой кабинет Нои
-  другие/
-    юристы/             # вне Нои
+/Users/user/Projects/          Cursor/
+  dendriit/                      dendriit/           ← кабинет Нои
+    anna/                          anna/             ← проект
+    bitrix-yurist/                 bitrix-yurist/    ← проект
+  <cabinet>/                     <cabinet>/          ← другой кабинет
 ```
 
-Несколько кабинетов Нои подключаются через **глобальные Secrets Cursor** (`NOYA_KEY_<SLUG>`) и project-level MCP — не через один ключ в `~/.cursor/mcp.json`.
+Кабинет ≠ проект. Анна и Битрикс-Юрист — проекты кабинета ДендрИИт (общий ключ `NOYA_KEY_DENDRIIT`).
 
-Правила: `Cursor/AGENTS.md`, `.cursor/rules/workspace-layout.mdc`, `Cursor/noya/_shared/cabinets-and-keys.md`.
+Правила: `Cursor/AGENTS.md`, `Cursor/_shared/cabinets-and-keys.md`.

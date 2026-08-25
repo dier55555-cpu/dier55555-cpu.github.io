@@ -1,10 +1,15 @@
-# Cursor
+# Cursor / Projects
 
-Единственная корневая папка для проектов агента.
+Локально всё в **`/Users/user/Projects`**. Здесь — зеркало той же схемы под `Cursor/`.
 
-- `noya/` — платформа Ноя (`projects/anna/`, другие кабинеты, общие инструкции в `_shared/`)
-- `другие/` — всё вне Нои (`юристы/`)
+```
+Projects/  (или Cursor/ в репо)
+  _shared/              # методология Нои
+  dendriit/             # кабинет
+    anna/               # проект
+    bitrix-yurist/      # проект
+  <cabinet>/            # другой кабинет Нои
+    <project>/
+```
 
-Мультипрофиль Нои (глобальные ключи): [noya/_shared/cabinets-and-keys.md](./noya/_shared/cabinets-and-keys.md).
-
-Подробности: [AGENTS.md](./AGENTS.md).
+Кабинет ≠ проект. Ключ Cursor — на кабинет. См. [_shared/cabinets-and-keys.md](./_shared/cabinets-and-keys.md) и [AGENTS.md](./AGENTS.md).

@@ -1,0 +1,11 @@
+{
+  "_comment": "Скопировать в mcp.json. URL как у рабочего кабинета; меняется только имя env.",
+  "mcpServers": {
+    "noya": {
+      "url": "PASTE_SAME_NOYA_MCP_URL_AS_OTHER_CABINET",
+      "headers": {
+        "Authorization": "Bearer ${env:NOYA_KEY_<CABINET>}"
+      }
+    }
+  }
+}
