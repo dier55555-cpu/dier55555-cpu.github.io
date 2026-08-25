@@ -15,9 +15,10 @@
 ├── NOY/                              NOY/
 │   ├── _shared/                      _shared/
 │   ├── dendriit/                     dendriit/          ← кабинет
+│   │   ├── noya-ai-mcp/              noya-ai-mcp/       ← MCP-подключение ДендрИИт
 │   │   ├── anna/                     anna/              ← проект
 │   │   └── легион/                   легион/            ← проект
-│   └── Neyroagents/                  Neyroagents/       ← кабинет (~11 воркфлоу)
+│   └── Neyroagents/                  Neyroagents/       ← кабинет (~11 воркфлоу; свой MCP позже)
 │       └── <проекты…>
 └── Другие/                           Другие/
     └── bitrix-yurist/                bitrix-yurist/     ← НЕ Ноя (сервер отдельно)
@@ -38,8 +39,8 @@
 
 | Кабинет | Секрет | Статус |
 |---------|--------|--------|
-| `NOY/dendriit/` | `NOYA_KEY_DENDRIIT` | подключаем / уже есть |
-| `NOY/Neyroagents/` | `NOYA_KEY_NEYROAGENTS` | ключи MCP скинет Александр позже |
+| `NOY/dendriit/` | `NOYA_KEY_DENDRIIT` | MCP-папка: `noya-ai-mcp/` |
+| `NOY/Neyroagents/` | `NOYA_KEY_NEYROAGENTS` | свой MCP позже; не брать ДендрИИт |
 | `Другие/*` | — | не Ноя |
 
 MCP: `<cabinet>/.cursor/mcp.json` с `${env:NOYA_KEY_…}`.  
