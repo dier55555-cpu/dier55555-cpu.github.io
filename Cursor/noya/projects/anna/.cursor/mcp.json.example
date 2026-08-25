@@ -1,4 +1,5 @@
 {
+  "_comment": "Скопируйте в mcp.json (в .gitignore). URL — как в рабочем MCP Нои; ключ только в Secrets как NOYA_KEY_DENDRIIT.",
   "mcpServers": {
     "noya": {
       "url": "PASTE_NOYA_MCP_URL",

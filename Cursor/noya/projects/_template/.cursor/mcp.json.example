@@ -1,7 +1,8 @@
 {
+  "_comment": "Скопируйте в mcp.json (файл в .gitignore). URL/транспорт — как у уже рабочего кабинета ДендрИИт; меняется только имя env. Значение ключа — в Cursor Secrets, не сюда.",
   "mcpServers": {
     "noya": {
-      "url": "PASTE_NOYA_MCP_URL_SAME_AS_WORKING_CABINET",
+      "url": "PASTE_SAME_NOYA_MCP_URL_AS_DENDRIIT",
       "headers": {
         "Authorization": "Bearer ${env:NOYA_KEY_<SLUG>}"
       }
