@@ -1,13 +1,13 @@
 ---
-description: Кабинет Neyroagents. Ключи MCP ещё не подключены.
+description: Кабинет Neyroagents. Свой MCP, не ДендрИИт.
 alwaysApply: true
 ---
 
 # Кабинет Нои: Neyroagents
 
-Секрет Cursor (ожидается): `NOYA_KEY_NEYROAGENTS`
+Секрет Cursor: `NOYA_KEY_NEYROAGENTS`  
+MCP-папка: `noya-ai-mcp/` (локально под этим кабинетом)
 
-Id кабинета, доски и список проектов — заполнить после того, как Александр пришлёт ключи MCP и состав воркфлоу.
-
-**Не использовать** `NOYA_KEY_DENDRIIT` в этом кабинете.  
+**Не использовать** ключ и `noya-ai-mcp` кабинета ДендрИИт.  
+Перед работой: включить MCP `noya-neyroagents`, выключить `noya` (ДендрИИт), затем `whoami`.  
 Ключи в git не писать.

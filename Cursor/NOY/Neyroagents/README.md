@@ -1,15 +1,22 @@
-# Кабинет: Neyroagents
+# Подключение MCP: кабинет Neyroagents
 
-Локально: `/Users/user/Projects/NOY/Neyroagents/`  
-В репо: `Cursor/NOY/Neyroagents/`
+Отдельный MCP от ДендрИИт. Ключ ДендрИИт сюда **не** копировать.
 
-Кабинет Нои с ~11 воркфлоу/проектами.
+## На Mac
 
-| Поле | Значение |
-|------|----------|
-| Секрет Cursor | `NOYA_KEY_NEYROAGENTS` |
-| MCP | ключи и URL — **позже** от Александра |
-| Проекты | появятся после подключения |
+```text
+/Users/user/Projects/NOY/Neyroagents/noya-ai-mcp/   ← MCP этого кабинета
+```
 
-Пока не выдумывать id кабинета/агентов и не подключать чужой ключ ДендрИИт.  
-Шаблон кабинета: `../_cabinet-template/`. Гайд: `../_shared/cabinets-and-keys.md`.
+В `~/.cursor/mcp.json` второй сервер, например `noya-neyroagents`, с `envFile` на эту папку.
+
+## Правило
+
+| Работаешь с | Включи MCP | Выключи |
+|-------------|------------|---------|
+| ДендрИИт (`anna`, `легион`) | `noya` | `noya-neyroagents` |
+| Neyroagents | `noya-neyroagents` | `noya` |
+
+Оба сразу — риск перепутать кабинет (`whoami`).
+
+Секрет: только локальный файл / Cursor Secrets `NOYA_KEY_NEYROAGENTS`. Не в git.
