@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "noya": {
+      "url": "PASTE_NOYA_MCP_URL_SAME_AS_WORKING_CABINET",
+      "headers": {
+        "Authorization": "Bearer ${env:NOYA_KEY_<SLUG>}"
+      }
+    }
+  }
+}

@@ -1,0 +1,14 @@
+---
+description: Всё под Cursor/; Ноя vs другие; кабинеты и ключи
+alwaysApply: true
+---
+
+# Workspace layout
+
+- Все проекты агента — **только** внутри `Cursor/`. Не создавать лишних папок в корне.
+- **Ноя** → `Cursor/noya/projects/<имя>/`. Перед работой читай `Cursor/noya/_shared/`.
+- **Всё остальное** → `Cursor/другие/<имя>/`. Инструкции Нои туда **не** применять.
+- Несколько кабинетов Нои: один кабинет = одна папка = один секрет `NOYA_KEY_<SLUG>`. См. `Cursor/noya/_shared/cabinets-and-keys.md`.
+- Ною не класть в `~/.cursor/mcp.json`. Ключи не писать в git.
+- Известно: Анна = `Cursor/noya/projects/anna/` (`NOYA_KEY_DENDRIIT`); юристы = `Cursor/другие/юристы/`.
+- Подробности: `Cursor/AGENTS.md`.

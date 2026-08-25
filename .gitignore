@@ -1,0 +1,11 @@
+# Игнор секретов Нои / локального MCP
+
+# Локальные mcp.json с реальным подключением (в git только *.example)
+**/.cursor/mcp.json
+!.cursor/mcp.json.example
+!**/.cursor/mcp.json.example
+
+# Локальные env с ключами
+.env
+.env.*
+!**/.env.example

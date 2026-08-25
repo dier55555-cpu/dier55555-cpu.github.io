@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "noya": {
+      "url": "PASTE_NOYA_MCP_URL",
+      "headers": {
+        "Authorization": "Bearer ${env:NOYA_KEY_DENDRIIT}"
+      }
+    }
+  }
+}
