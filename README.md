@@ -2,16 +2,13 @@
 
 Публичная страница: корневой `index.html`.
 
-Рабочие проекты агента зеркалятся в **`Cursor/`** по той же схеме, что локально в **`/Users/user/Projects`**:
+Рабочая схема проектов (зеркало `/Users/user/Projects`) — в **`Cursor/`**:
 
 ```
-/Users/user/Projects/          Cursor/
-  dendriit/                      dendriit/           ← кабинет Нои
-    anna/                          anna/             ← проект
-    bitrix-yurist/                 bitrix-yurist/    ← проект
-  <cabinet>/                     <cabinet>/          ← другой кабинет
+/Users/user/Projects/NOY/dendriit/{anna,легион}
+/Users/user/Projects/NOY/Neyroagents/…
+/Users/user/Projects/Другие/bitrix-yurist/
 ```
 
-Кабинет ≠ проект. Анна и Битрикс-Юрист — проекты кабинета ДендрИИт (общий ключ `NOYA_KEY_DENDRIIT`).
-
-Правила: `Cursor/AGENTS.md`, `Cursor/_shared/cabinets-and-keys.md`.
+`bitrix-yurist` — вне Нои (отдельный сервер).  
+Правила: `Cursor/AGENTS.md`, `Cursor/NOY/_shared/cabinets-and-keys.md`.

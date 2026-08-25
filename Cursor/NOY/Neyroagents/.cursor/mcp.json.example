@@ -1,0 +1,11 @@
+{
+  "_comment": "Заполнить после получения ключей. Секрет: NOYA_KEY_NEYROAGENTS. Не коммитить mcp.json с секретом.",
+  "mcpServers": {
+    "noya": {
+      "url": "PASTE_NEYROAGENTS_NOYA_MCP_URL",
+      "headers": {
+        "Authorization": "Bearer ${env:NOYA_KEY_NEYROAGENTS}"
+      }
+    }
+  }
+}

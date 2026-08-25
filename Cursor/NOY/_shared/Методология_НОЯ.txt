@@ -4,7 +4,7 @@
 
 Выше этого файла: MCP instruction_guide (каналы, PII, имена действий, что Ноя дописывает сама).
 Id кабинета и список его проектов: <cabinet>/.cursor/rules/noya-cabinets.mdc. Сюда их не копировать.
-Кабинет ≠ проект. Ключи и дерево папок: Cursor/_shared/cabinets-and-keys.md (локально /Users/user/Projects).
+Дерево папок: Cursor/NOY/_shared/cabinets-and-keys.md (локально /Users/user/Projects/NOY и /Users/user/Projects/Другие).
 
 Если правила нет в instruction_guide и нет здесь — не выдумывать. Сказать Александру.
 
@@ -14,7 +14,7 @@ Id кабинета и список его проектов: <cabinet>/.cursor/r
 
 Перед любым изменением агента, промпта, канала, действия, БЗ или триггера:
 1. Вызови instruction_guide и следуй ему дословно
-2. whoami. Не тот кабинет — стоп, открыть папку кабинета (/Users/user/Projects/<cabinet>/). Ключ на кабинет, не на проект; не копировать между кабинетами. Ною не держать в ~/.cursor/mcp.json — mcp.json в папке кабинета + секрет NOYA_KEY_<CABINET> (см. cabinets-and-keys.md)
+2. whoami. Не тот кабинет — стоп, открыть /Users/user/Projects/NOY/<cabinet>/. Ключ на кабинет; не копировать между кабинетами. Ною не держать в ~/.cursor/mcp.json — mcp.json в папке кабинета + NOYA_KEY_<CABINET>. bitrix-yurist не в NOY (см. cabinets-and-keys.md)
 3. Назови вслух: кабинет → доска → агент (имя + id из list_agents). Не править «того продажного» без id
 4. list_agents / list_channels → get_agent (карта целиком) → правка → test_agent → update_agent
 5. Инструкцию в update_agent передавать целиком, с версия_инструкции. Фрагмент затрёт остальное

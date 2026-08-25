@@ -1,0 +1,11 @@
+{
+  "_comment": "Скопировать в mcp.json. Ключ только в Secrets как NOYA_KEY_DENDRIIT.",
+  "mcpServers": {
+    "noya": {
+      "url": "PASTE_NOYA_MCP_URL",
+      "headers": {
+        "Authorization": "Bearer ${env:NOYA_KEY_DENDRIIT}"
+      }
+    }
+  }
+}
