@@ -72,7 +72,7 @@
         "specifyBody": "json",
         "jsonBody": "={{ JSON.stringify($json.payload) }}",
         "options": {
-          "timeout": 55000,
+          "timeout": 90000,
           "response": {
             "response": {
               "neverError": true

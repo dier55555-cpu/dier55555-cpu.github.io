@@ -47,7 +47,7 @@ from .forms import SearchFormInfo, parse_search_form
 
 Status = Literal[
     "found", "not_found", "captcha_required", "captcha_failed",
-    "unmapped_fields", "blocked", "error",
+    "unmapped_fields", "blocked", "error", "unavailable",
 ]
 
 # Stateless GET, как в n8n: без разбора <form>, без капчи.
@@ -220,11 +220,13 @@ def search_case_direct(
     hits = parse_search_hits(html, fetch_result.url or search_url)
     if not hits:
         # Часто ГАС отдаёт «оболочку» сайта без #tablcont — модуль sud_delo лежит.
+        # status=unavailable: не крутить другие прокси — это сбой ГАС у всех, не IP.
         return CaseSearchResult(
-            "error",
-            "Сайт суда открылся, но таблица результатов поиска дел не пришла "
-            "(раздел «Судебное делопроизводство» временно не отдаёт выдачу). "
-            "Попробуйте позже или откройте поиск на сайте суда вручную.",
+            "unavailable",
+            "Раздел «Судебное делопроизводство» на сайте суда сейчас не отдаёт "
+            "выдачу (открылась оболочка сайта без таблицы дел). Это сбой ГАС "
+            "«Правосудие», не номер дела. Попробуйте позже или откройте поиск "
+            "на сайте суда вручную.",
         )
 
     # Полная карточка — второй HTTP. По номеру обычно 1 дело; по фамилии — до 2,

@@ -249,3 +249,20 @@ def test_search_case_direct_not_found():
     )
     assert result.status == "not_found"
 
+
+def test_search_case_direct_empty_shell_is_unavailable():
+    """Оболочка сайта без #tablcont = сбой ГАС, не повод крутить все прокси."""
+    html = "<html><head><title>Суд</title></head><body><h1>Советский районный суд</h1></body></html>"
+
+    class DirectFetcher(FakeFetcher):
+        def request(self, method, url, params=None, data=None, **kwargs):
+            return _ok(html)
+
+    result = search_case_direct(
+        DirectFetcher("", []),
+        "sovetsky--vrn.sudrf.ru",
+        CaseQuery(case_number="2-1248/2026"),
+    )
+    assert result.status == "unavailable"
+    assert "Правосудие" in result.message or "не отдаёт" in result.message
+

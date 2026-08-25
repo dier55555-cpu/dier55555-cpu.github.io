@@ -273,30 +273,33 @@ def delo_lookup(payload: CaseLookupRequest, x_api_key: Optional[str] = Header(de
         _proxy_port(used) if used else "direct",
         time.monotonic() - t0,
     )
+    # Анне достаточно found/not_found/error; unavailable → error с тем же текстом.
+    out_status = result.status if result.status in {"found", "not_found", "error"} else "error"
     text = result.as_text() if result.status == "found" else result.message
-    return CaseLookupResponse(status=result.status, result=text)
+    return CaseLookupResponse(status=out_status, result=text)
 
 
 def _case_with_channels(domain: str, query: CaseQuery, production_type: str):
-    """Карточка: last_good + остальные sticky, затем direct.
+    """Карточка: last_good + 1 sticky + direct.
 
-    Модуль sud_delo на ГАС часто подвисает (обычные страницы суда при этом живы).
-    Короткий connect-timeout, быстрый перебор портов. Бюджет ≤50с под n8n 55с.
-    Нужны до 2 HTTP (поиск + гидрация карточки) на успешном канале.
+    Шлюз n8n/Caddy режет вебхук ~30с — весь поиск должен уложиться в ≤24с,
+    иначе Анна видит 504 «n8n timeout» вместо честного error.
+
+    unavailable (пустая оболочка sud_delo) = сбой ГАС у всех → сразу наружу,
+    без перебора остальных портов.
     """
-    channels: list[Optional[str]] = list(_ordered_proxies()[:8])
-    # Прямой IP VPS — запасной канал: главная суда с него открывается.
-    channels.append(None)
+    channels: list[Optional[str]] = list(_ordered_proxies()[:2])
+    channels.append(None)  # direct IP VPS — запасной канал
     last_result = None
     used = ""
-    t_budget = time.monotonic() + 50.0
+    t_budget = time.monotonic() + 24.0
     for channel in channels:
         if time.monotonic() >= t_budget:
             break
         remaining = max(5.0, t_budget - time.monotonic())
-        # (connect, read): не ждать 20с на мёртвом туннеле.
-        read_timeout = min(18.0, remaining)
-        timeout = (4.0, read_timeout)
+        # (connect, read): не ждать мёртвый туннель; на один канал ≤22с.
+        read_timeout = min(22.0, remaining)
+        timeout = (3.0, read_timeout)
         if channel is None:
             fetcher = Fetcher(
                 proxy_urls=[],
@@ -321,10 +324,12 @@ def _case_with_channels(domain: str, query: CaseQuery, production_type: str):
         )
         last_result = result
         used = used_label
-        if result.status in {"found", "not_found"}:
+        # found/not_found — готово; unavailable — ГАС лежит у всех, не крутить порты.
+        if result.status in {"found", "not_found", "unavailable"}:
             if result.status == "found" and channel:
                 _save_last_good_proxy(channel)
             return result, used
+        # error/blocked — сеть/прокси; пробуем следующий канал, пока есть бюджет.
     if last_result is None:
         return (
             CaseSearchResult(
