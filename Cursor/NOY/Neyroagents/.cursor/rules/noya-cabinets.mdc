@@ -1,0 +1,13 @@
+---
+description: Кабинет Neyroagents. Свой MCP, не ДендрИИт.
+alwaysApply: true
+---
+
+# Кабинет Нои: Neyroagents
+
+Секрет Cursor: `NOYA_KEY_NEYROAGENTS`  
+MCP-папка: `noya-ai-mcp/` (локально под этим кабинетом)
+
+**Не использовать** ключ и `noya-ai-mcp` кабинета ДендрИИт.  
+Перед работой: включить MCP `noya-neyroagents`, выключить `noya` (ДендрИИт), затем `whoami`.  
+Ключи в git не писать.

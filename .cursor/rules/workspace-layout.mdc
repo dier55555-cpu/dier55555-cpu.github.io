@@ -1,0 +1,14 @@
+---
+description: Projects = NOY (кабинеты) + Другие; bitrix не в Ное
+alwaysApply: true
+---
+
+# Workspace layout
+
+- Корень Mac: `/Users/user/Projects`. В репо: `Cursor/`.
+- `NOY/` — платформа Ноя. Внутри: кабинеты (`dendriit/`, `Neyroagents/`), в кабинетах — проекты.
+- `Другие/` — всё вне Нои. **`bitrix-yurist/` только здесь** (сервер, не Ноя).
+- `dendriit/`: `noya-ai-mcp/` (MCP этого кабинета) + проекты `anna/`, `легион/`. Ключ `NOYA_KEY_DENDRIIT`.
+- `Neyroagents/`: кабинет; свой MCP позже (`NOYA_KEY_NEYROAGENTS`), не копировать `noya-ai-mcp` ДендрИИт.
+- Ключ на кабинет; MCP в папке кабинета; не в `~/.cursor/mcp.json`.
+- Гайд: `Cursor/NOY/_shared/cabinets-and-keys.md`. Правила: `Cursor/AGENTS.md`.
