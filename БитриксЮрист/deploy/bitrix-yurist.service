@@ -1,0 +1,15 @@
+[Unit]
+Description=БитриксЮрист — один прогон мониторинга сделок
+After=network-online.target bitrix-delo.service
+Wants=network-online.target bitrix-delo.service
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/bitrix-yurist
+EnvironmentFile=/opt/bitrix-yurist/.env
+Environment=TZ=Europe/Moscow
+ExecStart=/usr/bin/python3 /opt/bitrix-yurist/bitrix.py
+Nice=10
+
+[Install]
+WantedBy=multi-user.target

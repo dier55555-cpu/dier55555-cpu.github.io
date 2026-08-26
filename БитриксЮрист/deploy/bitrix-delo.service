@@ -1,0 +1,16 @@
+[Unit]
+Description=БитриксЮрист delo API (копия парсера Анны, порт 8081)
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/bitrix-delo
+Environment=PYTHONUNBUFFERED=1
+EnvironmentFile=/opt/bitrix-delo/.env
+ExecStart=/opt/bitrix-delo/venv/bin/uvicorn api.delo_app:app --host 127.0.0.1 --port 8081 --workers 2
+Restart=always
+RestartSec=3
+MemoryMax=400M
+
+[Install]
+WantedBy=multi-user.target

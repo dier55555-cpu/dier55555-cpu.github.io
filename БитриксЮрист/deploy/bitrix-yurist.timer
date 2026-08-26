@@ -1,0 +1,10 @@
+[Unit]
+Description=БитриксЮрист каждый день в 06:00 МСК
+
+[Timer]
+OnCalendar=*-*-* 06:00:00
+Persistent=true
+Unit=bitrix-yurist.service
+
+[Install]
+WantedBy=timers.target
