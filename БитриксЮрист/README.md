@@ -33,4 +33,5 @@ TWOCAPTCHA_API_KEY=...
 
 Пакет: `pip install 2captcha-python` в venv bitrix-delo. Gate `kcaptchaForm` решается автоматически; ответ POST в windows-1251.
 
-План: [PLAN.md](PLAN.md)
+План: [PLAN.md](PLAN.md)  
+ТЗ для долгого подключения клиента: [TZ-CLIENT.md](TZ-CLIENT.md)
