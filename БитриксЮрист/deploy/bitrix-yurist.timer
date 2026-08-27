@@ -1,8 +1,8 @@
 [Unit]
-Description=БитриксЮрист каждый день в 06:00 МСК
+Description=БитриксЮрист каждый день в 08:00 МСК
 
 [Timer]
-OnCalendar=*-*-* 06:00:00
+OnCalendar=*-*-* 08:00:00
 Persistent=true
 Unit=bitrix-yurist.service
 
