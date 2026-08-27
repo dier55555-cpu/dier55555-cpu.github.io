@@ -38,13 +38,16 @@ BITRIX_WEBHOOK_URL = _env("BITRIX_WEBHOOK_URL")
 CATEGORY_ID = int(_env("BITRIX_CATEGORY_ID") or "0")
 WORKING_STAGE_IDS = _env_list("BITRIX_STAGE_IDS")
 
-UF_CASE_NUMBER = _env("UF_CASE_NUMBER") or "UF_CRM_CASE_NUMBER"
+# Несколько кодов через запятую: берём первое непустое значение.
+UF_CASE_NUMBER_FIELDS = _env_list("UF_CASE_NUMBER") or ["UF_CRM_CASE_NUMBER"]
+UF_COURT_WEBSITE_FIELDS = _env_list("UF_COURT_WEBSITE") or ["UF_CRM_COURT_WEBSITE"]
+UF_CASE_NUMBER = UF_CASE_NUMBER_FIELDS[0]
+UF_COURT_WEBSITE = UF_COURT_WEBSITE_FIELDS[0]
 UF_COURT_SLUG = _env("UF_COURT_SLUG") or "UF_CRM_COURT_SLUG"
 UF_COURT_NAME = _env("UF_COURT_NAME") or "UF_CRM_COURT_NAME"
 UF_REGION = _env("UF_REGION") or "UF_CRM_REGION"
 UF_CITY = _env("UF_CITY") or "UF_CRM_CITY"
 UF_DISTRICT = _env("UF_DISTRICT") or "UF_CRM_DISTRICT"
-UF_COURT_WEBSITE = _env("UF_COURT_WEBSITE") or "UF_CRM_COURT_WEBSITE"
 UF_LAST_STATUS = _env("UF_LAST_STATUS") or "UF_CRM_LAST_STATUS"
 UF_LAST_CHECK_AT = _env("UF_LAST_CHECK_AT") or "UF_CRM_LAST_CHECK_AT"
 UF_SNAPSHOT_HASH = _env("UF_SNAPSHOT_HASH") or "UF_CRM_SNAPSHOT_HASH"
@@ -123,6 +126,47 @@ def _txt(value: Any) -> Optional[str]:
     return str(value).strip()
 
 
+def _extract_case_number(raw: Any) -> Optional[str]:
+    """Достаёт номер дела из свободного текста: «ДЕЛО № 2-1248/2026 ~ М-52/2026»."""
+    import re
+
+    text = _txt(raw)
+    if not text:
+        return None
+    # Уже чистый номер
+    if re.fullmatch(r"\d+-\d+(?:/\d{2,4})?", text):
+        return text
+    m = re.search(r"(\d+\s*-\s*\d+\s*/\s*\d{2,4})", text)
+    if m:
+        return re.sub(r"\s+", "", m.group(1))
+    m = re.search(r"(\d+\s*-\s*\d+)", text)
+    if m:
+        return re.sub(r"\s+", "", m.group(1))
+    return text
+
+
+def _website_origin(raw: Any) -> Optional[str]:
+    """Из полной ссылки на карточку дела оставляет origin сайта суда."""
+    from urllib.parse import urlparse
+
+    text = _txt(raw)
+    if not text:
+        return None
+    if not text.startswith(("http://", "https://")):
+        text = "https://" + text
+    parsed = urlparse(text)
+    if not parsed.netloc:
+        return text
+    return f"{parsed.scheme}://{parsed.netloc}/"
+
+
+def _first_field(item: dict[str, Any], fields: list[str]) -> Any:
+    for code in fields:
+        if _is_filled(item.get(code)):
+            return item.get(code)
+    return None
+
+
 def pull_deals() -> list[Deal]:
     deals: list[Deal] = []
     filter_: dict[str, Any] = {"CATEGORY_ID": CATEGORY_ID}
@@ -134,8 +178,9 @@ def pull_deals() -> list[Deal]:
             "filter": filter_,
             "select": [
                 "ID", "TITLE", "STAGE_ID", "CONTACT_ID", "COMMENTS",
-                UF_CASE_NUMBER, UF_COURT_SLUG, UF_COURT_NAME, UF_REGION,
-                UF_CITY, UF_DISTRICT, UF_COURT_WEBSITE, UF_SNAPSHOT_HASH, "UF_*",
+                UF_COURT_SLUG, UF_COURT_NAME, UF_REGION,
+                UF_CITY, UF_DISTRICT, UF_SNAPSHOT_HASH, "UF_*",
+                *UF_CASE_NUMBER_FIELDS, *UF_COURT_WEBSITE_FIELDS,
             ],
             "start": start,
         })
@@ -143,21 +188,21 @@ def pull_deals() -> list[Deal]:
         if not batch:
             break
         for item in batch:
-            case_number = item.get(UF_CASE_NUMBER)
-            if not _is_filled(case_number):
+            case_number = _extract_case_number(_first_field(item, UF_CASE_NUMBER_FIELDS))
+            if not case_number:
                 continue
             deals.append(Deal(
                 id=int(item["ID"]),
                 title=item.get("TITLE") or "",
                 stage_id=item.get("STAGE_ID") or "",
                 contact_id=int(item["CONTACT_ID"]) if item.get("CONTACT_ID") else None,
-                case_number=str(case_number).strip(),
+                case_number=case_number,
                 court_slug=_txt(item.get(UF_COURT_SLUG)),
                 court_name=_txt(item.get(UF_COURT_NAME)),
                 region=_txt(item.get(UF_REGION)),
                 city=_txt(item.get(UF_CITY)),
                 district=_txt(item.get(UF_DISTRICT)),
-                court_website=_txt(item.get(UF_COURT_WEBSITE)),
+                court_website=_website_origin(_first_field(item, UF_COURT_WEBSITE_FIELDS)),
                 snapshot_hash=_txt(item.get(UF_SNAPSHOT_HASH)),
                 comments=str(item.get("COMMENTS") or ""),
                 raw=item,
@@ -180,8 +225,16 @@ def _api_headers() -> dict[str, str]:
 
 def resolve_court_from_kb(deal: Deal) -> dict[str, Any]:
     """Всегда сверяем карточку со справочником судов РФ."""
-    # TITLE сделки («Клиент1») в запрос не тащим — ломает токен-матчинг.
+    # TITLE сделки («Клиент1» / «КЛИЕНТ 2») в запрос не тащим — ломает токен-матчинг.
+    # Если уже есть website дела — справочник не обязателен для /delo.
     court_name = deal.court_name or deal.court_slug or ""
+    has_geo = any([deal.region, deal.city, deal.district, court_name])
+    if not has_geo and deal.court_website:
+        return {
+            "status": "skipped",
+            "result": "гео/название суда пустые — используем website из сделки",
+            "court": {"website": deal.court_website, "name": deal.court_name or ""},
+        }
     payload = {
         "region": deal.region or "",
         "city": deal.city or "",
@@ -191,8 +244,9 @@ def resolve_court_from_kb(deal: Deal) -> dict[str, Any]:
         "prefer_magistrate": None,
         "limit": 5,
     }
+    # Без geo и без website — нечем искать; TITLE не используем.
     if not any([payload["region"], payload["city"], payload["district"], payload["court_name"]]):
-        payload["query"] = deal.title or ""
+        return {"status": "skipped", "result": "нет региона/города/района/названия суда и website"}
     q = (payload["court_name"] + " " + payload["district"] + " " + payload["city"]).lower()
     if "миров" in q or "участок" in q:
         payload["prefer_magistrate"] = True
@@ -333,6 +387,8 @@ def run_daily_job() -> dict[str, int]:
                     UF_CITY: court.get("city") or deal.city or "",
                     UF_DISTRICT: court.get("district") or deal.district or "",
                 })
+        elif resolved.get("status") == "skipped":
+            logger.info("Deal %s: court KB skipped — %s", deal.id, resolved.get("result"))
         else:
             logger.warning("Deal %s: court KB %s — %s", deal.id, resolved.get("status"), resolved.get("result"))
 
