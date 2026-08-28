@@ -1,13 +1,12 @@
-"""Точные названия вкладок и столбцов сайтов райсудов (ГАС «Правосудие»).
+"""Точные названия вкладок и столбцов сайтов судов (ГАС «Правосудие»).
 
-Районный/городской суд: *.sudrf.ru, карточка name_op=case.
-Областной суд — отдельно (названия отличаются); константы добавим после скринов.
+Районный/городской: job/sudrf_tabs_rayon.md
+Областной (апелляция): job/sudrf_tabs_oblsud.md
 
 Не путать:
-- вкладка навигации: «ОБЖАЛОВАНИЕ РЕШЕНИЙ, ОПРЕДЕЛЕНИЙ (ПОСТ.)»
-- секция внутри вкладки: «ЖАЛОБА № 1*», «ДВИЖЕНИЕ ЖАЛОБЫ»
-
-Документация со скринов: job/sudrf_tabs_rayon.md
+- райсуд, вкладка: «ОБЖАЛОВАНИЕ РЕШЕНИЙ, ОПРЕДЕЛЕНИЙ (ПОСТ.)»
+- внутри неё: «ЖАЛОБА № 1*», «ДВИЖЕНИЕ ЖАЛОБЫ»
+- облсуд: вкладки другие (нет «ОБЖАЛОВАНИЕ…», есть «РАССМОТРЕНИЕ В НИЖЕСТОЯЩЕМ СУДЕ», «УЧАСТНИКИ»)
 """
 
 from __future__ import annotations
@@ -145,3 +144,40 @@ def is_rayon_movement_tab(name: str) -> bool:
 
 def is_rayon_acts_tab(name: str) -> bool:
     return _up(TAB_ACTS) in _up(name)
+
+
+# =============================================================================
+# Областной суд (апелляция) — скрин 33-5260/2025
+# =============================================================================
+
+OBLSUD_TAB_DELO = "ДЕЛО"
+OBLSUD_TAB_LOWER_COURT = "РАССМОТРЕНИЕ В НИЖЕСТОЯЩЕМ СУДЕ"
+OBLSUD_TAB_MOVEMENT = "ДВИЖЕНИЕ ДЕЛА"
+OBLSUD_TAB_PARTICIPANTS = "УЧАСТНИКИ"  # не «СТОРОНЫ ПО ДЕЛУ…»
+OBLSUD_TAB_ACTS = "СУДЕБНЫЕ АКТЫ"
+
+OBLSUD_TABS = (
+    OBLSUD_TAB_DELO,
+    OBLSUD_TAB_LOWER_COURT,
+    OBLSUD_TAB_MOVEMENT,
+    OBLSUD_TAB_PARTICIPANTS,
+    OBLSUD_TAB_ACTS,
+)
+
+# Поля вкладки «РАССМОТРЕНИЕ В НИЖЕСТОЯЩЕМ СУДЕ»
+OBLSUD_FIELD_LOWER_COURT_NAME = "Суд (судебный участок) первой инстанции"
+OBLSUD_FIELD_LOWER_CASE_NUMBER = "Номер дела в первой инстанции"
+OBLSUD_FIELD_LOWER_JUDGE = "Судья (мировой судья) первой инстанции"
+
+
+def is_oblsud_lower_court_tab(name: str) -> bool:
+    u = _up(name)
+    return _up(OBLSUD_TAB_LOWER_COURT) in u or "НИЖЕСТОЯЩЕМ СУДЕ" in u
+
+
+def is_oblsud_participants_tab(name: str) -> bool:
+    return _up(OBLSUD_TAB_PARTICIPANTS) in _up(name)
+
+
+def is_oblsud_movement_tab(name: str) -> bool:
+    return _up(OBLSUD_TAB_MOVEMENT) in _up(name)
