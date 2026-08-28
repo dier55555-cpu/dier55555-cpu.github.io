@@ -258,8 +258,8 @@ def spravka_lookup(payload: SpravkaRequest, x_api_key: Optional[str] = Header(de
     return CaseLookupResponse(status=result.status, result=text)
 
 
-@app.post("/delo", response_model=CaseLookupResponse)
-def delo_lookup(payload: CaseLookupRequest, x_api_key: Optional[str] = Header(default=None)) -> CaseLookupResponse:
+@app.post("/delo")
+def delo_lookup(payload: CaseLookupRequest, x_api_key: Optional[str] = Header(default=None)):
     """Единая точка для действия «Дело»: карточка ИЛИ справка с сайта."""
     _check_api_key(x_api_key)
 
@@ -355,7 +355,19 @@ def delo_lookup(payload: CaseLookupRequest, x_api_key: Optional[str] = Header(de
     if result.status not in {"found", "not_found"} and used:
         # после ошибки поиска проверим сырой HTML на капчу/заглушку одним коротким GET
         pass
-    return CaseLookupResponse(status=result.status, result=out)
+    # Структурированная карточка для триггер-движка (граф этапов).
+    if result.status == "found" and getattr(result, "cases", None):
+        card0 = result.cases[0]
+        sections = getattr(card0, "sections", {}) or {}
+        return {
+            "status": result.status,
+            "result": out,
+            "case_url": getattr(card0, "case_url", None),
+            "case_number": getattr(card0, "case_number", None) or case_number,
+            "sections": sections,
+            "section_names": list(sections.keys()),
+        }
+    return {"status": result.status, "result": out}
 
 
 def _case_with_channels(domain: str, query: CaseQuery, production_type: str):

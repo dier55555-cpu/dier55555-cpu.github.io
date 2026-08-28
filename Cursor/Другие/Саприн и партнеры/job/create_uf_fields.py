@@ -16,6 +16,11 @@ FIELDS = [
     ("UF_CRM_SAPRIN_SNAP_HASH", "string", "Саприн: хэш снимка движения дела"),
     ("UF_CRM_SAPRIN_KNOWN_STAGE", "string", "Саприн: последний известный системе этап"),
     ("UF_CRM_SAPRIN_COURT_SITE", "url", "Саприн: сайт суда (нормализованный)"),
+    ("UF_CRM_SAPRIN_DECISION_DATE", "string", "Саприн: дата изготовления решения"),
+    ("UF_CRM_SAPRIN_DECISION_PUB", "string", "Саприн: дата размещения решения на сайте"),
+    ("UF_CRM_SAPRIN_DEADLINE_40D", "string", "Саприн: дедлайн 40 дней"),
+    ("UF_CRM_SAPRIN_STAGE_ENTER", "string", "Саприн: дата входа в текущий этап"),
+    ("UF_CRM_SAPRIN_APPEAL_RESULT", "string", "Саприн: результат обжалования"),
 ]
 
 

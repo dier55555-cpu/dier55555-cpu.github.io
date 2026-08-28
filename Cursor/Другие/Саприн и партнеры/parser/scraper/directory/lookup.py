@@ -43,10 +43,7 @@ _TOKEN = re.compile(r"[а-яёa-z0-9-]+", re.IGNORECASE)
 def tokenize_query(query: str) -> list[str]:
     tokens = []
     for raw in _TOKEN.findall(_norm_key(query)):
-        if raw in STOPWORDS:
-            continue
-        # номер участка «8» должен сохраняться
-        if len(raw) < 2 and not raw.isdigit():
+        if raw in STOPWORDS or len(raw) < 2:
             continue
         tokens.append(raw)
     return tokens
@@ -111,12 +108,6 @@ def score_record(record: CourtRecord, tokens: Sequence[str]) -> int:
         return 0
     if record.parser_supported:
         score += 1
-    nums = [t for t in tokens if t.isdigit()]
-    if nums:
-        name = _norm_key(record.name)
-        for n in nums:
-            if re.search(rf"(?:№|номер|участок)\s*{n}\b", name) or re.search(rf"\b{n}\b", name):
-                score += 8
     return score
 
 

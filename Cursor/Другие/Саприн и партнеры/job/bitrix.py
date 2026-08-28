@@ -20,6 +20,16 @@ from zoneinfo import ZoneInfo
 
 import requests
 
+from triggers import (
+    AUTOMATED_STAGES,
+    build_movement_from_card_sections,
+    build_movement_from_text,
+    decide_next_stage,
+    detect_tabs,
+    is_forward,
+    parse_ru_date,
+)
+
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 logger = logging.getLogger("saprin-bitrix")
 
@@ -53,6 +63,12 @@ UF_LAST_CHECK_AT = _env("UF_LAST_CHECK_AT") or "UF_CRM_SAPRIN_LAST_CHECK"
 UF_SNAPSHOT_HASH = _env("UF_SNAPSHOT_HASH") or "UF_CRM_SAPRIN_SNAP_HASH"
 UF_LAST_KNOWN_STAGE = _env("UF_LAST_KNOWN_STAGE") or "UF_CRM_SAPRIN_KNOWN_STAGE"
 UF_COURT_WEBSITE = _env("UF_COURT_WEBSITE") or "UF_CRM_SAPRIN_COURT_SITE"
+UF_DECISION_DATE = _env("UF_DECISION_DATE") or "UF_CRM_SAPRIN_DECISION_DATE"
+UF_DECISION_PUBLISHED = _env("UF_DECISION_PUBLISHED") or "UF_CRM_SAPRIN_DECISION_PUB"
+UF_DEADLINE_40D = _env("UF_DEADLINE_40D") or "UF_CRM_SAPRIN_DEADLINE_40D"
+UF_STAGE_ENTER = _env("UF_STAGE_ENTER") or "UF_CRM_SAPRIN_STAGE_ENTER"
+UF_APPEAL_RESULT = _env("UF_APPEAL_RESULT") or "UF_CRM_SAPRIN_APPEAL_RESULT"
+APPLY_STAGE_MOVES = _env("APPLY_STAGE_MOVES", "1") not in {"0", "false", "False"}
 
 COURT_KB_API_URL = (_env("COURT_KB_API_URL") or "http://127.0.0.1:8081").rstrip("/")
 COURT_KB_API_KEY = _env("COURT_KB_API_KEY")
@@ -82,6 +98,11 @@ class Deal:
     court_website: Optional[str]
     snapshot_hash: Optional[str]
     last_known_stage: Optional[str]
+    decision_date: Optional[str] = None
+    decision_published: Optional[str] = None
+    deadline_40d: Optional[str] = None
+    stage_enter: Optional[str] = None
+    appeal_result: Optional[str] = None
     raw: dict = field(default_factory=dict)
 
 
@@ -160,6 +181,7 @@ def pull_deals() -> list[Deal]:
     select = [
         "ID", "TITLE", "STAGE_ID",
         UF_CASE_NUMBER, UF_SNAPSHOT_HASH, UF_LAST_KNOWN_STAGE, UF_COURT_WEBSITE,
+        UF_DECISION_DATE, UF_DECISION_PUBLISHED, UF_DEADLINE_40D, UF_STAGE_ENTER, UF_APPEAL_RESULT,
         *UF_COURT_URLS,
     ]
     start = 0
@@ -177,14 +199,23 @@ def pull_deals() -> list[Deal]:
             if not case_number or not case_number.startswith("2-"):
                 continue
             website = extract_court_website(item)
+            def _uf(name: str) -> Optional[str]:
+                v = item.get(name)
+                return str(v).strip() if v not in (None, "", False, [], {}) else None
+
             deals.append(Deal(
                 id=int(item["ID"]),
                 title=item.get("TITLE") or "",
                 stage_id=item.get("STAGE_ID") or "",
                 case_number=case_number,
                 court_website=website,
-                snapshot_hash=(str(item.get(UF_SNAPSHOT_HASH)).strip() if item.get(UF_SNAPSHOT_HASH) else None),
-                last_known_stage=(str(item.get(UF_LAST_KNOWN_STAGE)).strip() if item.get(UF_LAST_KNOWN_STAGE) else None),
+                snapshot_hash=_uf(UF_SNAPSHOT_HASH),
+                last_known_stage=_uf(UF_LAST_KNOWN_STAGE),
+                decision_date=_uf(UF_DECISION_DATE),
+                decision_published=_uf(UF_DECISION_PUBLISHED),
+                deadline_40d=_uf(UF_DEADLINE_40D),
+                stage_enter=_uf(UF_STAGE_ENTER),
+                appeal_result=_uf(UF_APPEAL_RESULT),
                 raw=item,
             ))
             if LIMIT_DEALS and len(deals) >= LIMIT_DEALS:
@@ -281,6 +312,59 @@ def comment_timeline(deal_id: int, text: str) -> None:
     time.sleep(RATE_LIMIT_SLEEP)
 
 
+def move_stage(deal_id: int, stage_id: str) -> None:
+    _call("crm.deal.update", {"id": deal_id, "fields": {"STAGE_ID": stage_id}})
+    time.sleep(RATE_LIMIT_SLEEP)
+
+
+def apply_trigger_fields(decision_fields: dict[str, Any]) -> dict[str, Any]:
+    out: dict[str, Any] = {}
+    mapping = {
+        "decision_date": UF_DECISION_DATE,
+        "decision_published_at": UF_DECISION_PUBLISHED,
+        "deadline_40d": UF_DEADLINE_40D,
+        "appeal_result": UF_APPEAL_RESULT,
+    }
+    for key, uf in mapping.items():
+        if decision_fields.get(key):
+            out[uf] = decision_fields[key]
+    return out
+
+
+def run_triggers(deal: Deal, parsed: dict[str, Any]) -> dict[str, Any]:
+    """Возвращает decision dict для логов/записи."""
+    sections = parsed.get("sections") or {}
+    rows = build_movement_from_card_sections(sections)
+    if not rows:
+        rows = build_movement_from_text(str(parsed.get("result") or ""))
+    tabs = detect_tabs(str(parsed.get("result") or ""), sections)
+    # эвристика вкладок по именам секций
+    for name in (parsed.get("section_names") or sections.keys()):
+        n = str(name).lower()
+        if "обжалован" in n:
+            tabs["appeal"] = True
+        if "исполнительн" in n:
+            tabs["il"] = True
+
+    decision = decide_next_stage(
+        current_stage=deal.stage_id,
+        rows=rows,
+        tabs=tabs,
+        decision_final_date=parse_ru_date(deal.decision_date or ""),
+        decision_published_at=parse_ru_date(deal.decision_published or ""),
+        stage_enter_date=parse_ru_date(deal.stage_enter or ""),
+        appeal_result=deal.appeal_result,
+    )
+    return {
+        "action": decision.action,
+        "to_stage": decision.to_stage,
+        "reason": decision.reason,
+        "comment": decision.comment,
+        "fields": decision.fields,
+        "movement_rows": len(rows),
+    }
+
+
 def format_comment(deal: Deal, parsed: dict[str, Any], changed: bool, checked_at: str) -> str:
     lines = [
         "[Саприн] Обновление дела произведено" if changed else "[Саприн] Проверка дела выполнена, изменений нет",
@@ -310,7 +394,8 @@ def detect_manual_stage_move(deal: Deal) -> Optional[str]:
 
 def run_daily_job() -> dict[str, int]:
     stats = {
-        "total": 0, "changed": 0, "unchanged": 0, "errors": 0, "skipped": 0, "manual": 0,
+        "total": 0, "changed": 0, "unchanged": 0, "errors": 0, "skipped": 0,
+        "manual": 0, "moved": 0, "trigger_stop": 0,
     }
     if not BITRIX_WEBHOOK_URL or "YOUR_PORTAL" in BITRIX_WEBHOOK_URL:
         logger.warning("BITRIX_WEBHOOK_URL не задан — прогон пропущен")
@@ -322,13 +407,22 @@ def run_daily_job() -> dict[str, int]:
 
     for deal in deals:
         checked_at = _now_label()
+        today_iso = datetime.now(TZ).date().isoformat()
         manual_note = detect_manual_stage_move(deal)
         if manual_note:
             stats["manual"] += 1
             logger.info("Deal %s manual stage move", deal.id)
             if not DRY_RUN:
                 comment_timeline(deal.id, manual_note)
-                push_fields(deal.id, {UF_LAST_KNOWN_STAGE: deal.stage_id})
+                push_fields(deal.id, {
+                    UF_LAST_KNOWN_STAGE: deal.stage_id,
+                    UF_STAGE_ENTER: today_iso,
+                })
+
+        if deal.stage_id not in AUTOMATED_STAGES:
+            stats["skipped"] += 1
+            logger.info("Deal %s stage %s not automated — skip parse", deal.id, deal.stage_id)
+            continue
 
         try:
             parsed = lookup_delo(deal)
@@ -367,10 +461,16 @@ def run_daily_job() -> dict[str, int]:
         changed = prev != digest
         comment = format_comment(deal, parsed, changed, checked_at)
 
+        trig = run_triggers(deal, parsed)
+        logger.info(
+            "Deal %s trigger action=%s to=%s reason=%s rows=%s",
+            deal.id, trig["action"], trig.get("to_stage"), trig.get("reason"), trig.get("movement_rows"),
+        )
+
         if DRY_RUN:
             logger.info(
-                "DRY_RUN deal %s %s changed=%s status_len=%s",
-                deal.id, deal.case_number, changed, len(status_text),
+                "DRY_RUN deal %s %s changed=%s trigger=%s",
+                deal.id, deal.case_number, changed, trig["action"],
             )
         else:
             fields = {
@@ -380,8 +480,33 @@ def run_daily_job() -> dict[str, int]:
                 UF_LAST_KNOWN_STAGE: deal.stage_id,
                 UF_COURT_WEBSITE: deal.court_website or "",
             }
+            fields.update(apply_trigger_fields(trig.get("fields") or {}))
+            # если ещё нет даты входа в этап — зафиксируем
+            if not deal.stage_enter:
+                fields[UF_STAGE_ENTER] = today_iso
+
+            if trig["action"] == "move" and trig.get("to_stage") and APPLY_STAGE_MOVES:
+                to_stage = trig["to_stage"]
+                if is_forward(deal.stage_id, to_stage):
+                    move_stage(deal.id, to_stage)
+                    fields[UF_LAST_KNOWN_STAGE] = to_stage
+                    fields[UF_STAGE_ENTER] = today_iso
+                    stats["moved"] += 1
+                    comment = (
+                        f"[Саприн] Автопереход этапа\n"
+                        f"{deal.stage_id} → {to_stage}\n"
+                        f"Причина: {trig.get('reason')}\n"
+                        f"{trig.get('comment') or ''}\n\n"
+                        f"{comment}"
+                    )
+                else:
+                    logger.warning("Deal %s refuse non-forward move %s→%s", deal.id, deal.stage_id, to_stage)
+            elif trig["action"] == "stop_manual":
+                stats["trigger_stop"] += 1
+                comment = f"[Саприн] {trig.get('comment')}\n\n{comment}"
+
             push_fields(deal.id, fields)
-            if changed or not COMMENT_ONLY_ON_CHANGE:
+            if changed or not COMMENT_ONLY_ON_CHANGE or trig["action"] in {"move", "stop_manual"}:
                 comment_timeline(deal.id, comment)
 
         hashes[str(deal.id)] = digest
