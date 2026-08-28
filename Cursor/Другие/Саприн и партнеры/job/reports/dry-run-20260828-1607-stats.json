@@ -1,0 +1,17 @@
+{
+  "started": "28.08.2026 16:07",
+  "finished": "28.08.2026 16:31",
+  "count": 197,
+  "actions": {
+    "none": 106,
+    "move": 83,
+    "no_parse": 2,
+    "skip_manual_stage": 6
+  },
+  "risks": {
+    "wait": 106,
+    "would_move": 72,
+    "info": 8,
+    "review_jump": 11
+  }
+}
