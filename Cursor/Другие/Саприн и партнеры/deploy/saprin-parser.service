@@ -8,6 +8,9 @@ User=saprin
 Group=saprin
 WorkingDirectory=/opt/saprin/parser
 Environment=PYTHONUNBUFFERED=1
+Environment=PYTHONPATH=/opt/saprin/parser
+Environment=TZ=Europe/Moscow
+EnvironmentFile=-/opt/saprin/job/.env.proxy
 EnvironmentFile=/opt/saprin/parser/.env
 ExecStart=/opt/saprin/venv/bin/uvicorn api.delo_app:app --host 127.0.0.1 --port 8081 --workers 1
 Restart=always

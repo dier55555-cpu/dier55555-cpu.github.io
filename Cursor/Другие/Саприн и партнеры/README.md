@@ -1,38 +1,72 @@
-# Саприн и партнеры — мониторинг судебных дел (Битрикс24)
+# Саприн и партнёры — парсер судов + Bitrix job
 
-Отдельный контур на VPS `168.222.202.68` (не Анна, не Ноя).
+Контур: **`Cursor/Другие/Саприн и партнеры/`** (не Ноя, отдельно от Анны).  
+VPS: `168.222.202.68` (`parcer555-vps-2`) → `/opt/saprin/{parser,job,data,logs,venv}`.
 
-## Состав
+## Архитектура
 
-| Путь на VPS | Назначение |
+```
+Bitrix24 (CATEGORY_ID=2 «Исполнение»)
+        │  crm.deal.list
+        ▼
+/opt/saprin/job/bitrix.py  + triggers.py
+        │  POST http://127.0.0.1:8081/delo
+        ▼
+saprin-parser.service  (api.delo_app, :8081)
+        │  COURT_KB_PROXY (residential RU)
+        ▼
+*.sudrf.ru   (msudrf — skipped, без 2captcha)
+```
+
+Секреты (webhook, proxy) **только на VPS**, `chmod 600`, не в git.
+
+## Клиентские UF
+
+| Назначение | Код |
 |---|---|
-| `/opt/saprin/parser` | FastAPI `/delo` + `/court_lookup` (:8081) |
-| `/opt/saprin/job` | Job Bitrix → парсер → UF/timeline |
-| `/opt/saprin/venv` | Python 3.12 |
-| `/opt/saprin/logs` | логи |
+| № дела | `UF_CRM_1741881362933` |
+| Ссылка на дело (приоритет) | `UF_CRM_1747812731315` → `UF_CRM_1742479380838` → `UF_CRM_1739466337400` (+ запасные url UF) |
 
-## Клиентский маппинг
+## Служебные UF (на портале)
 
-- Воронка: `CATEGORY_ID=2` (Исполнение)
-- Номер дела: `UF_CRM_1741881362933` (берём `2-…/…`)
-- Ссылка на суд: `UF_CRM_1747812731315` (+ запасные URL-поля)
-- Мировые (`msudrf`) — skip
+Префикс `UF_CRM_SAPRIN_*` (см. `job/.env.example` и `job/create_uf_fields.py`):  
+`LAST_STATUS`, `LAST_CHECK`, `SNAP_HASH`, `KNOWN_STAGE`, `COURT_SITE`, `DECISION_DATE`, `DECISION_PUB`, `DEADLINE_40D`, `STAGE_ENTER`, `APPEAL_RESULT`.
 
-## Таймеры (МСК)
+## Расписание (МСК)
 
-- Пн **08:00** — этапы до «Вынесено решение»
-- Пн–Пт **08:30** — «Вынесено решение» и далее
+| Unit | Когда | Этапы |
+|---|---|---|
+| `saprin-job-weekly.timer` | Пн 08:00 | до «Вынесено решение» |
+| `saprin-job-daily.timer` | Пн–Пт 08:30 | с «Вынесено решение» и далее |
+
+## Деплой
+
+```bash
+export SAPRIN_SSH_KEY=~/.ssh/saprin_id_rsa
+bash scripts/deploy.sh
+```
+
+На VPS: `/opt/saprin/parser/.env` (`COURT_KB_PROXY=…`), `/opt/saprin/job/.env` (webhook, `DRY_RUN=1`), `/opt/saprin/job/.env.proxy`.
+
+```bash
+systemctl restart saprin-parser
+systemctl enable --now saprin-job-weekly.timer saprin-job-daily.timer
+```
 
 ## Ручной прогон
 
 ```bash
-sudo systemctl start saprin-job-weekly.service
-# или
-cd /opt/saprin/job && set -a && source .env && set +a && /opt/saprin/venv/bin/python bitrix.py
+curl -sS http://127.0.0.1:8081/health
+curl -sS http://127.0.0.1:8081/delo -H 'Content-Type: application/json' \
+  -d '{"case_number":"2-6302/2024","website":"https://kominternovsky--vrn.sudrf.ru/"}'
+
+cd /opt/saprin/job
+set -a && source .env && set +a
+LIMIT_DEALS=3 DRY_RUN=1 /opt/saprin/venv/bin/python bitrix.py
 ```
 
-`DRY_RUN=1` — только лог, без записи в CRM.
+## Ограничения
 
-## Секреты
-
-Только на VPS в `.env` (mode 600), не в git.
+- **В8** (апелляция отменила/изменила): `stop_manual` + комментарий, без автоперехода.
+- Пока `DRY_RUN=1` — в Bitrix ничего не пишется; `APPLY_STAGE_MOVES` сработает только после снятия DRY_RUN.
+- Мировые суды / 2captcha / Ноя / n8n / Анна (`/opt/court-kb`) — вне контура.
