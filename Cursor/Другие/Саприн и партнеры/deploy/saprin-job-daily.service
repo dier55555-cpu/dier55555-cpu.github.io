@@ -10,6 +10,8 @@ Group=saprin
 WorkingDirectory=/opt/saprin/job
 EnvironmentFile=/opt/saprin/job/.env
 Environment=TZ=Europe/Moscow
+Environment=PARSE_CONCURRENCY=6
+Environment=PARSE_HOST_PAUSE_SEC=0.8
 Environment=BITRIX_STAGE_IDS=C2:UC_GZ6RL3,C2:UC_YJ087T,C2:UC_2M4FYU,C2:UC_B2ZGR1,C2:UC_ILS0X3
 ExecStart=/opt/saprin/venv/bin/python /opt/saprin/job/bitrix.py
 Nice=10

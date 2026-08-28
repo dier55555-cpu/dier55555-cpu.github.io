@@ -10,6 +10,8 @@ Group=saprin
 WorkingDirectory=/opt/saprin/job
 EnvironmentFile=/opt/saprin/job/.env
 Environment=TZ=Europe/Moscow
+Environment=PARSE_CONCURRENCY=6
+Environment=PARSE_HOST_PAUSE_SEC=0.8
 # этапы до «Вынесено решение»
 Environment=BITRIX_STAGE_IDS=C2:UC_VQSC1C,C2:UC_X3GNNS,C2:FINAL_INVOICE,C2:UC_YADE6K,C2:UC_SM5W4O,C2:UC_IPH4VF
 ExecStart=/opt/saprin/venv/bin/python /opt/saprin/job/bitrix.py

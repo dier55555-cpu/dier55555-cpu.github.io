@@ -27,7 +27,7 @@ from scraper.case_lookup.search import (
 from scraper.case_lookup.case_number import validate_case_number
 from scraper.court_info import fetch_court_info, normalize_topic, website_to_origin
 from scraper.fetch import Fetcher
-from scraper.proxy_pool import proxies_from_env
+from scraper.proxy_pool import lease_sticky_proxy, proxies_from_env
 
 app = FastAPI(title="court-kb delo", version="1.1.0")
 log = logging.getLogger("delo")
@@ -381,23 +381,23 @@ def delo_lookup(payload: CaseLookupRequest, x_api_key: Optional[str] = Header(de
 
 
 def _case_with_channels(domain: str, query: CaseQuery, production_type: str):
-    """Карточка: last_good + остальные sticky, затем direct.
+    """Один sticky-порт на запрос (аренда из пула), затем direct.
 
-    Модуль sud_delo на ГАС часто подвисает (обычные страницы суда при этом живы).
-    Короткий connect-timeout, быстрый перебор портов. Бюджет ≤50с под n8n 55с.
-    Нужны до 2 HTTP (поиск + гидрация карточки) на успешном канале.
+    При 6 параллельных /delo — 6 разных исходящих IP (порты 10000–10009).
     """
-    channels: list[Optional[str]] = list(_ordered_proxies()[:8])
-    # Прямой IP VPS — запасной канал: главная суда с него открывается.
-    channels.append(None)
     last_result = None
     used = ""
     t_budget = time.monotonic() + 50.0
-    for channel in channels:
+    try:
+        lease_cm = lease_sticky_proxy(timeout=20.0)
+    except Exception:
+        lease_cm = None
+
+    def _run(channel: Optional[str]):
+        nonlocal last_result, used
         if time.monotonic() >= t_budget:
-            break
+            return None
         remaining = max(5.0, t_budget - time.monotonic())
-        # (connect, read): не ждать 20с на мёртвом туннеле.
         read_timeout = min(18.0, remaining)
         timeout = (4.0, read_timeout)
         if channel is None:
@@ -424,10 +424,18 @@ def _case_with_channels(domain: str, query: CaseQuery, production_type: str):
         )
         last_result = result
         used = used_label
-        if result.status in {"found", "not_found"}:
-            if result.status == "found" and channel:
-                _save_last_good_proxy(channel)
-            return result, used
+        return result
+
+    if lease_cm is not None:
+        with lease_cm as channel:
+            result = _run(channel)
+            if result is not None and result.status in {"found", "not_found"}:
+                if result.status == "found" and channel:
+                    _save_last_good_proxy(channel)
+                return last_result, used
+            result = _run(None)
+            return last_result, used
+    result = _run(None)
     if last_result is None:
         return (
             CaseSearchResult(

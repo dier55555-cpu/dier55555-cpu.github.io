@@ -12,6 +12,9 @@ COURT_KB_PROXY_PORTS — «10001-10010» или «10001,10002,10006»: подс�
 from __future__ import annotations
 
 import os
+import queue
+import threading
+from contextlib import contextmanager
 from urllib.parse import urlparse, urlunparse
 
 
@@ -121,3 +124,50 @@ def is_dead_proxy(error: str) -> bool:
         "407",
     )
     return any(m in text for m in markers)
+
+
+class StickyLeasePool:
+    """Параллельные /delo не делят sticky-порт: каждый держит свой до конца."""
+
+    def __init__(self) -> None:
+        self._q: queue.Queue[str | None] = queue.Queue()
+        self._ready = False
+        self._lock = threading.Lock()
+        self.size = 0
+
+    def reset(self, urls: list[str] | None = None) -> None:
+        urls = urls if urls is not None else proxies_from_env()
+        with self._lock:
+            while True:
+                try:
+                    self._q.get_nowait()
+                except queue.Empty:
+                    break
+            if not urls:
+                self._q.put(None)
+                self.size = 0
+            else:
+                for u in urls:
+                    self._q.put(u)
+                self.size = len(urls)
+            self._ready = True
+
+    def _ensure(self) -> None:
+        if not self._ready:
+            self.reset()
+
+    @contextmanager
+    def lease(self, timeout: float = 45.0):
+        self._ensure()
+        url = self._q.get(timeout=timeout)
+        try:
+            yield url
+        finally:
+            self._q.put(url)
+
+
+_LEASE = StickyLeasePool()
+
+
+def lease_sticky_proxy(timeout: float = 45.0):
+    return _LEASE.lease(timeout=timeout)
