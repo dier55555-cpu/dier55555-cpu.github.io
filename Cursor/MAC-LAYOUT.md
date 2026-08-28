@@ -8,6 +8,7 @@ mkdir -p "/Users/user/Projects/NOY/dendriit/anna"
 mkdir -p "/Users/user/Projects/NOY/dendriit/легион"
 mkdir -p "/Users/user/Projects/NOY/Neyroagents"
 mkdir -p "/Users/user/Projects/Другие/bitrix-yurist"
+mkdir -p "/Users/user/Projects/Другие/Саприн и партнеры"
 
 # Зеркало правил из git (этот репо) — по желанию:
 cd /Users/user/Projects/dier55555-cpu.github.io
@@ -29,5 +30,5 @@ ls -la "/Users/user/Projects/NOY/dendriit"
 ls -la "/Users/user/Projects/Другие"
 ```
 
-Ожидаемо: `dendriit/{anna,легион}`, `Neyroagents`, `Другие/bitrix-yurist`.  
+Ожидаемо: `dendriit/{anna,легион}`, `Neyroagents`, `Другие/{bitrix-yurist,Саприн и партнеры}`.  
 MCP для Neyroagents — после ключей от Александра.
