@@ -84,6 +84,13 @@ SNAPSHOT_PATH = os.path.join(os.path.dirname(__file__), "data", "snapshots.json"
 CASE_RE = re.compile(r"(?<![A-Za-zА-Яа-я0-9])([12])-(\d{1,6})/(\d{4})(?![0-9])")
 SUDRF_RE = re.compile(r"https?://([a-z0-9.-]+\.sudrf\.ru)", re.I)
 
+# Нет URL и нет сохранённого сайта — не перебираем суды области.
+SKIP_NO_COURT_MARKER = "нет_сайта_суда"
+MSG_NO_COURT = (
+    "Нет сайта суда и нет данных, по какому райсуду искать. "
+    "Укажите ссылку на дело или название суда."
+)
+
 
 class BitrixError(Exception):
     pass
@@ -98,6 +105,7 @@ class Deal:
     court_website: Optional[str]
     snapshot_hash: Optional[str]
     last_known_stage: Optional[str]
+    last_status: Optional[str] = None
     decision_date: Optional[str] = None
     decision_published: Optional[str] = None
     deadline_40d: Optional[str] = None
@@ -181,6 +189,7 @@ def pull_deals() -> list[Deal]:
     select = [
         "ID", "TITLE", "STAGE_ID",
         UF_CASE_NUMBER, UF_SNAPSHOT_HASH, UF_LAST_KNOWN_STAGE, UF_COURT_WEBSITE,
+        UF_LAST_STATUS, UF_LAST_CHECK_AT,
         UF_DECISION_DATE, UF_DECISION_PUBLISHED, UF_DEADLINE_40D, UF_STAGE_ENTER, UF_APPEAL_RESULT,
         *UF_COURT_URLS,
     ]
@@ -211,6 +220,7 @@ def pull_deals() -> list[Deal]:
                 court_website=website,
                 snapshot_hash=_uf(UF_SNAPSHOT_HASH),
                 last_known_stage=_uf(UF_LAST_KNOWN_STAGE),
+                last_status=_uf(UF_LAST_STATUS),
                 decision_date=_uf(UF_DECISION_DATE),
                 decision_published=_uf(UF_DECISION_PUBLISHED),
                 deadline_40d=_uf(UF_DEADLINE_40D),
@@ -239,7 +249,12 @@ def _api_headers() -> dict[str, str]:
 
 def lookup_delo(deal: Deal) -> dict[str, Any]:
     if not deal.court_website:
-        return {"status": "skipped", "result": "нет ссылки на сайт суда (sudrf) в карточке"}
+        # Не перебираем все райсуды области — без сайта/названия суда стоп + комментарий.
+        return {
+            "status": "skipped",
+            "reason": SKIP_NO_COURT_MARKER,
+            "result": MSG_NO_COURT,
+        }
     if "msudrf.ru" in deal.court_website.lower():
         return {"status": "skipped", "result": "мировые суды исключены из объёма"}
 
@@ -432,7 +447,39 @@ def run_daily_job() -> dict[str, int]:
         if status != "found":
             if status == "skipped":
                 stats["skipped"] += 1
-                logger.info("Deal %s skipped: %s", deal.id, parsed.get("result"))
+                reason = str(parsed.get("reason") or "")
+                msg = str(parsed.get("result") or "")
+                logger.info("Deal %s skipped: %s", deal.id, msg)
+                # Нет сайта суда: один раз пишем в ленту (не спамим каждый прогон).
+                if reason == SKIP_NO_COURT_MARKER:
+                    already = SKIP_NO_COURT_MARKER in (deal.last_status or "")
+                    status_mark = f"{SKIP_NO_COURT_MARKER}: {MSG_NO_COURT}"[:250]
+                    if DRY_RUN:
+                        logger.info(
+                            "DRY_RUN deal %s no-court comment=%s",
+                            deal.id, "skip-already" if already else "would-post",
+                        )
+                    else:
+                        push_fields(deal.id, {
+                            UF_LAST_STATUS: status_mark,
+                            UF_LAST_CHECK_AT: checked_at,
+                            UF_LAST_KNOWN_STAGE: deal.stage_id,
+                        })
+                        if not already:
+                            comment_timeline(
+                                deal.id,
+                                f"[Саприн] {MSG_NO_COURT}\n"
+                                f"Номер дела: {deal.case_number or '—'}\n"
+                                f"Проверено: {checked_at}",
+                            )
+                elif msg:
+                    # другие skip (мировые и т.п.) — только статус, без ежедневного спама
+                    if not DRY_RUN:
+                        push_fields(deal.id, {
+                            UF_LAST_STATUS: f"skipped: {msg}"[:250],
+                            UF_LAST_CHECK_AT: checked_at,
+                            UF_LAST_KNOWN_STAGE: deal.stage_id,
+                        })
             else:
                 stats["errors"] += 1
                 note = (
