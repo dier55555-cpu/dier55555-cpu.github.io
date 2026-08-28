@@ -10,6 +10,7 @@ from __future__ import annotations
 import logging
 import os
 import random
+import threading
 import time
 from typing import Optional
 from urllib.parse import urlparse
@@ -34,9 +35,11 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(mess
 
 _last_good_proxy: Optional[str] = None
 _LAST_GOOD_PROXY_PATH = "/opt/saprin/parser/.last_good_proxy"
+_proxy_lock = threading.Lock()
 # Кэш справок (website+topic), чтобы повтор Анны не долбил sudrf и не ловил TCP-ban.
 _spravka_cache: dict[tuple[str, str], tuple[float, object]] = {}
 _SPRAVKA_CACHE_TTL_SEC = 1800.0
+_spravka_lock = threading.Lock()
 
 
 def _load_last_good_proxy() -> None:
@@ -45,14 +48,16 @@ def _load_last_good_proxy() -> None:
         with open(_LAST_GOOD_PROXY_PATH, encoding="utf-8") as f:
             raw = f.read().strip()
         if raw.startswith("http"):
-            _last_good_proxy = raw
+            with _proxy_lock:
+                _last_good_proxy = raw
     except OSError:
         pass
 
 
 def _save_last_good_proxy(url: str) -> None:
     global _last_good_proxy
-    _last_good_proxy = url
+    with _proxy_lock:
+        _last_good_proxy = url
     try:
         with open(_LAST_GOOD_PROXY_PATH, "w", encoding="utf-8") as f:
             f.write(url)
@@ -66,9 +71,11 @@ _load_last_good_proxy()
 def _ordered_proxies() -> list[str]:
     urls = proxies_from_env()
     random.shuffle(urls)
-    if _last_good_proxy and _last_good_proxy in urls:
-        urls.remove(_last_good_proxy)
-        urls.insert(0, _last_good_proxy)
+    with _proxy_lock:
+        good = _last_good_proxy
+    if good and good in urls:
+        urls.remove(good)
+        urls.insert(0, good)
     return urls
 
 
@@ -109,7 +116,8 @@ def _spravka_with_fallback(website: str, topic: str):
     origin = website_to_origin(website) or website.strip()
     cache_key = (origin.rstrip("/"), topic)
     now = time.monotonic()
-    hit = _spravka_cache.get(cache_key)
+    with _spravka_lock:
+        hit = _spravka_cache.get(cache_key)
     if hit and now - hit[0] < _SPRAVKA_CACHE_TTL_SEC:
         return hit[1], None, "cache"
 
@@ -132,10 +140,12 @@ def _spravka_with_fallback(website: str, topic: str):
             if channel:
                 _save_last_good_proxy(channel)
                 used = channel
-            _spravka_cache[cache_key] = (now, result)
+            with _spravka_lock:
+                _spravka_cache[cache_key] = (now, result)
             return result, fetcher, used
         if result.status == "not_found":
-            _spravka_cache[cache_key] = (now, result)
+            with _spravka_lock:
+                _spravka_cache[cache_key] = (now, result)
             return result, fetcher, used if channel else ""
     assert last_result is not None
     return last_result, last_fetcher, used

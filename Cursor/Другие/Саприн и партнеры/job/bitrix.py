@@ -20,6 +20,7 @@ from zoneinfo import ZoneInfo
 
 import requests
 
+from court_pool import CourtParsePool, court_host
 from triggers import (
     AUTOMATED_STAGES,
     build_movement_from_card_sections,
@@ -76,6 +77,9 @@ COURT_KB_API_KEY = _env("COURT_KB_API_KEY")
 DRY_RUN = _env("DRY_RUN", "1") not in {"0", "false", "False"}
 COMMENT_ONLY_ON_CHANGE = _env("COMMENT_ONLY_ON_CHANGE", "1") not in {"0", "false", "False"}
 PAUSE_BETWEEN_DEALS_SEC = float(_env("PAUSE_BETWEEN_DEALS_SEC") or "5")
+# Сколько РАЗНЫХ судов дергать сразу (I/O). Один hostname — всегда очередь.
+PARSE_CONCURRENCY = int(_env("PARSE_CONCURRENCY") or "6")
+PARSE_HOST_PAUSE_SEC = float(_env("PARSE_HOST_PAUSE_SEC") or "0.8")
 LIMIT_DEALS = int(_env("LIMIT_DEALS") or "0")  # 0 = все
 TZ = ZoneInfo(_env("TZ") or "Europe/Moscow")
 RATE_LIMIT_SLEEP = 0.55
@@ -417,6 +421,18 @@ def run_daily_job() -> dict[str, int]:
     deals = pull_deals()
     stats["total"] = len(deals)
 
+    to_parse = [d for d in deals if d.stage_id in AUTOMATED_STAGES]
+    parsed_by_id: dict[int, tuple[Optional[dict[str, Any]], Optional[BaseException]]] = {}
+    workers = max(1, PARSE_CONCURRENCY)
+    logger.info(
+        "Parse %s deals, concurrency=%s (разные суды параллельно, один хост — очередь)",
+        len(to_parse), workers,
+    )
+    if to_parse:
+        pool = CourtParsePool(workers, host_pause_sec=PARSE_HOST_PAUSE_SEC)
+        for deal, parsed, err in pool.run(to_parse, lambda d: court_host(d.court_website), lookup_delo):
+            parsed_by_id[deal.id] = (parsed, err)
+
     for deal in deals:
         checked_at = _now_label()
         today_iso = datetime.now(TZ).date().isoformat()
@@ -436,10 +452,9 @@ def run_daily_job() -> dict[str, int]:
             logger.info("Deal %s stage %s not automated — skip parse", deal.id, deal.stage_id)
             continue
 
-        try:
-            parsed = lookup_delo(deal)
-        except Exception as exc:
-            logger.error("Parser failed for deal %s: %s", deal.id, exc)
+        parsed, parse_exc = parsed_by_id.get(deal.id, (None, RuntimeError("no parse result")))
+        if parse_exc or not parsed:
+            logger.error("Parser failed for deal %s: %s", deal.id, parse_exc or "empty")
             stats["errors"] += 1
             continue
 
@@ -497,7 +512,6 @@ def run_daily_job() -> dict[str, int]:
                         UF_LAST_KNOWN_STAGE: deal.stage_id,
                     })
                     comment_timeline(deal.id, note)
-            time.sleep(PAUSE_BETWEEN_DEALS_SEC)
             continue
 
         digest, status_text = card_digest(parsed)
@@ -555,7 +569,6 @@ def run_daily_job() -> dict[str, int]:
 
         hashes[str(deal.id)] = digest
         stats["changed" if changed else "unchanged"] += 1
-        time.sleep(PAUSE_BETWEEN_DEALS_SEC)
 
     save_local_hashes(hashes)
     logger.info("Job done: %s", stats)

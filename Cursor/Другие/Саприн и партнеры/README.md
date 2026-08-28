@@ -12,7 +12,8 @@ Bitrix24 (CATEGORY_ID=2 «Исполнение»)
 /opt/saprin/job/bitrix.py  + triggers.py
         │  POST http://127.0.0.1:8081/delo
         ▼
-saprin-parser.service  (api.delo_app, :8081)
+saprin-parser.service  (api.delo_app, :8081, sync-handlers в threadpool)
+        │  до 6 одновременных /delo на РАЗНЫЕ суды
         │  COURT_KB_PROXY (residential RU)
         ▼
 *.sudrf.ru   (msudrf — skipped, без 2captcha)
@@ -81,4 +82,5 @@ LIMIT_DEALS=3 DRY_RUN=1 /opt/saprin/venv/bin/python bitrix.py
 - Нет ссылки на sudrf и нет сохранённого `COURT_SITE` → **не** перебираем суды области; один комментарий в ленту: указать ссылку на дело или название суда.
 - **В8** (апелляция отменила/изменила): `stop_manual` + комментарий, без автоперехода.
 - Пока `DRY_RUN=1` — в Bitrix ничего не пишется; `APPLY_STAGE_MOVES` сработает только после снятия DRY_RUN.
+- Парсинг: **до 6 разных судов сразу** (`PARSE_CONCURRENCY=6`); один и тот же hostname — очередь + пауза `PARSE_HOST_PAUSE_SEC`. VPS 2 CPU / 2 ГБ для этого хватает (ожидание сети).
 - Мировые суды / 2captcha / Ноя / n8n / Анна (`/opt/court-kb`) — вне контура.
