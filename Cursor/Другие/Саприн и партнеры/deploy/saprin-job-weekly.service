@@ -1,0 +1,16 @@
+[Unit]
+Description=Saprin Bitrix job — weekly stages (Mon 08:00)
+After=network-online.target saprin-parser.service
+Wants=network-online.target saprin-parser.service
+
+[Service]
+Type=oneshot
+User=saprin
+Group=saprin
+WorkingDirectory=/opt/saprin/job
+EnvironmentFile=/opt/saprin/job/.env
+Environment=TZ=Europe/Moscow
+# этапы до «Вынесено решение»
+Environment=BITRIX_STAGE_IDS=C2:UC_VQSC1C,C2:UC_X3GNNS,C2:FINAL_INVOICE,C2:UC_YADE6K,C2:UC_SM5W4O,C2:UC_IPH4VF
+ExecStart=/opt/saprin/venv/bin/python /opt/saprin/job/bitrix.py
+Nice=10
