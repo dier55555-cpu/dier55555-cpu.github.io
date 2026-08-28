@@ -14,12 +14,20 @@ echo "==> Sync parser + job (code only, not .env)"
 "${ssh_cmd[@]}" 'mkdir -p /opt/saprin/parser /opt/saprin/job/data /opt/saprin/data /opt/saprin/logs'
 "${scp_cmd[@]}" "$ROOT/parser/api" "$ROOT/parser/scraper" "$ROOT/parser/requirements.txt" \
   "${REMOTE_USER}@${HOST}:/opt/saprin/parser/"
-# directory JSON may be large — sync if present
+# directory JSON may be large — sync if present; do not shrink a richer dump already on VPS
 if [[ -f "$ROOT/parser/directory/courts-ru.json" ]]; then
-  "${scp_cmd[@]}" "$ROOT/parser/directory/courts-ru.json" \
-    "${REMOTE_USER}@${HOST}:/opt/saprin/parser/directory/"
+  "${ssh_cmd[@]}" 'mkdir -p /opt/saprin/parser/directory'
+  remote_sz=$("${ssh_cmd[@]}" 'stat -c%s /opt/saprin/parser/directory/courts-ru.json 2>/dev/null || echo 0')
+  local_sz=$(stat -c%s "$ROOT/parser/directory/courts-ru.json")
+  if [[ "${remote_sz:-0}" -gt "$local_sz" ]]; then
+    echo "==> keep VPS courts-ru.json (${remote_sz} > local ${local_sz})"
+  else
+    "${scp_cmd[@]}" "$ROOT/parser/directory/courts-ru.json" \
+      "${REMOTE_USER}@${HOST}:/opt/saprin/parser/directory/"
+  fi
 fi
-"${scp_cmd[@]}" "$ROOT/job/bitrix.py" "$ROOT/job/triggers.py" "$ROOT/job/create_uf_fields.py" \
+"${scp_cmd[@]}" "$ROOT/job/bitrix.py" "$ROOT/job/triggers.py" "$ROOT/job/sudrf_labels.py" \
+  "$ROOT/job/create_uf_fields.py" \
   "$ROOT/job/requirements.txt" "$ROOT/job/.env.example" \
   "${REMOTE_USER}@${HOST}:/opt/saprin/job/"
 
