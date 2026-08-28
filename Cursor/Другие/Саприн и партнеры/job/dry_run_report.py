@@ -15,6 +15,7 @@ from pathlib import Path
 from zoneinfo import ZoneInfo
 
 from court_pool import CourtParsePool, court_host
+from sudrf_labels import VORONEZH_CITY_RAYON_HOSTS
 from bitrix import Deal, lookup_delo, pull_deals, run_triggers
 import bitrix
 from triggers import (
@@ -208,6 +209,17 @@ def main() -> int:
     md_path = log_dir / f"dry-run-{stamp}.md"
 
     deals = pull_deals()
+    host_filter = os.environ.get("COURT_HOSTS", "").strip()
+    if host_filter.lower() in {"voronezh-city", "vrn-city", "6"}:
+        hosts = set(VORONEZH_CITY_RAYON_HOSTS)
+    elif host_filter:
+        hosts = {h.strip().lower() for h in host_filter.split(",") if h.strip()}
+    else:
+        hosts = set()
+    if hosts:
+        before = len(deals)
+        deals = [d for d in deals if court_host(d.court_website) in hosts]
+        print(f"filter hosts={sorted(hosts)} {before}→{len(deals)}", flush=True)
     rows: list[dict] = []
     print(
         f"pulled {len(deals)} deals, DRY_RUN={bitrix.DRY_RUN} "

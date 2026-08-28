@@ -181,3 +181,14 @@ def is_oblsud_participants_tab(name: str) -> bool:
 
 def is_oblsud_movement_tab(name: str) -> bool:
     return _up(OBLSUD_TAB_MOVEMENT) in _up(name)
+
+
+# 6 районных судов г. Воронежа (не область, не облсуд)
+VORONEZH_CITY_RAYON_HOSTS = (
+    "sovetsky--vrn.sudrf.ru",
+    "kominternovsky--vrn.sudrf.ru",
+    "zheleznodorozhny--vrn.sudrf.ru",
+    "levoberezhny--vrn.sudrf.ru",
+    "centralny--vrn.sudrf.ru",
+    "lensud--vrn.sudrf.ru",
+)
