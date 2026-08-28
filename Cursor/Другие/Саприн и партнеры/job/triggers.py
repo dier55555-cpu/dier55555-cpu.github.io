@@ -139,10 +139,18 @@ def comment_from_row(prefix: str, row: MovementRow) -> str:
 
 
 def build_movement_from_card_sections(sections: dict) -> list[MovementRow]:
-    """Из секций CaseCard (ключ события → 'дата | время | … | размещено …')."""
+    """Из секций CaseCard (ключ события → 'дата | время | … | размещено …').
+
+    Берём только вкладку «ДВИЖЕНИЕ ДЕЛА», не «ДВИЖЕНИЕ ЖАЛОБЫ».
+    """
+    try:
+        from sudrf_labels import is_rayon_movement_tab
+    except ImportError:  # pragma: no cover
+        from job.sudrf_labels import is_rayon_movement_tab  # type: ignore
+
     rows: list[MovementRow] = []
     for name, items in (sections or {}).items():
-        if "ДВИЖЕНИЕ" not in str(name).upper():
+        if not is_rayon_movement_tab(str(name)):
             continue
         for item in items or []:
             if not isinstance(item, dict):
@@ -210,13 +218,26 @@ def build_movement_from_text(result_text: str) -> list[MovementRow]:
 
 
 def detect_tabs(result_text: str, sections: Optional[dict] = None) -> dict[str, bool]:
-    blob = _norm(result_text or "")
-    sec = " ".join(str(k) for k in (sections or {}).keys()).lower()
-    return {
-        "appeal": ("обжалование" in blob) or ("обжалование" in sec),
-        "il": ("исполнительн" in blob and "лист" in blob) or ("исполнительн" in sec),
-        "acts": ("судебные акты" in blob) or ("судебные акты" in sec),
-    }
+    """Детект вкладок райсуда по точным именам (job/sudrf_labels.py)."""
+    try:
+        from sudrf_labels import (
+            is_rayon_acts_tab,
+            is_rayon_appeal_tab,
+            is_rayon_writs_tab,
+        )
+    except ImportError:  # pragma: no cover
+        from job.sudrf_labels import (  # type: ignore
+            is_rayon_acts_tab,
+            is_rayon_appeal_tab,
+            is_rayon_writs_tab,
+        )
+
+    names = [str(k) for k in (sections or {}).keys()]
+    blob = result_text or ""
+    appeal = any(is_rayon_appeal_tab(n) for n in names) or is_rayon_appeal_tab(blob)
+    il = any(is_rayon_writs_tab(n) for n in names) or is_rayon_writs_tab(blob)
+    acts = any(is_rayon_acts_tab(n) for n in names) or is_rayon_acts_tab(blob)
+    return {"appeal": appeal, "il": il, "acts": acts}
 
 
 def decide_next_stage(
@@ -368,8 +389,8 @@ def decide_next_stage(
         if tabs.get("appeal"):
             return TriggerDecision(
                 action="move", to_stage=STAGE_APPEAL,
-                comment="На основании данных с сайта суда появилась вкладка «Обжалование решений, определений (пост.)».",
-                reason="decision→appeal: tab present",
+                comment="На основании данных с сайта суда появилась вкладка «ОБЖАЛОВАНИЕ РЕШЕНИЙ, ОПРЕДЕЛЕНИЙ (ПОСТ.)».",
+                reason="decision→appeal: tab ОБЖАЛОВАНИЕ РЕШЕНИЙ, ОПРЕДЕЛЕНИЙ (ПОСТ.)",
                 fields=fields,
             )
         # 40 дней от даты изготовления (D)
@@ -429,7 +450,7 @@ def decide_next_stage(
         if tabs.get("il"):
             return TriggerDecision(
                 action="move", to_stage=STAGE_GOT_IL,
-                comment="На основании данных с сайта суда появилась вкладка «Исполнительные листы».",
+                comment="На основании данных с сайта суда появилась вкладка «ИСПОЛНИТЕЛЬНЫЕ ЛИСТЫ».",
                 reason="request_il→got_il",
             )
         row = latest_matching(rows, lambda r: _contains(r.event, "исполнительн") and _contains(r.event, "лист"))

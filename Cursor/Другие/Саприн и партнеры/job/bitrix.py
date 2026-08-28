@@ -337,14 +337,11 @@ def run_triggers(deal: Deal, parsed: dict[str, Any]) -> dict[str, Any]:
     rows = build_movement_from_card_sections(sections)
     if not rows:
         rows = build_movement_from_text(str(parsed.get("result") or ""))
-    tabs = detect_tabs(str(parsed.get("result") or ""), sections)
-    # эвристика вкладок по именам секций
-    for name in (parsed.get("section_names") or sections.keys()):
-        n = str(name).lower()
-        if "обжалован" in n:
-            tabs["appeal"] = True
-        if "исполнительн" in n:
-            tabs["il"] = True
+    # Имена секций/вкладок: точные подписи райсуда из sudrf_labels
+    merged_sections = dict(sections)
+    for name in parsed.get("section_names") or []:
+        merged_sections.setdefault(str(name), [])
+    tabs = detect_tabs(str(parsed.get("result") or ""), merged_sections)
 
     decision = decide_next_stage(
         current_stage=deal.stage_id,
