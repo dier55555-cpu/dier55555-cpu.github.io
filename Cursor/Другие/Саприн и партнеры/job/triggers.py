@@ -297,9 +297,9 @@ def decide_next_stage(
                 ),
                 reason="hearing→simplified",
             )
-        # 4) Без экспертизы: после предв. заседания состоялось СЗ (не будущая дата)
-        #    без приостановления; «оставлено без рассмотрения» — не этот этап.
-        main_row = first_held_main_hearing_no_expertise(rows, today)
+        # 4) ТЗ: после предзаседания есть «Судебное заседание» и между ними
+        #    нет приостановления производства → «Без судебной экспертизы, основное».
+        main_row = first_main_hearing_after_prelim_without_suspend(rows)
         if main_row:
             return TriggerDecision(
                 action="move",
@@ -495,28 +495,19 @@ def _is_main_hearing_event(row: MovementRow) -> bool:
     return _contains(row.event, "судебное заседание") and not _contains(row.event, "предварительн")
 
 
-def _is_not_main_track_result(row: MovementRow) -> bool:
-    """Исходы, которые не означают «перешли в основное без экспертизы»."""
-    return _contains(
-        row.result,
-        "без рассмотрения",
-        "прекращено",
-        "оставлено без движения",
-        "приостановлено",
-        "вынесено решение",  # это другой приоритет, сюда не должны попасть
+def _is_proceedings_suspended(row: MovementRow) -> bool:
+    return _contains(row.result, "приостановлено") or _contains(
+        row.event, "приостановление производства", "приостановлено",
     )
 
 
-def first_held_main_hearing_no_expertise(
+def first_main_hearing_after_prelim_without_suspend(
     rows: list[MovementRow],
-    today: Optional[date] = None,
 ) -> Optional[MovementRow]:
-    """Предзаседание → состоявшееся СЗ без приостановки/экспертизы.
-
-    Не триггерим, если СЗ только назначено на будущую дату или результат пустой
-    («ещё не прошло»), и если иск оставили без рассмотрения / производство прекратили.
+    """Вкладка «ДВИЖЕНИЕ ДЕЛА»: после «Предварительное судебное заседание»
+    есть «Судебное заседание», между ними нет приостановления производства.
+    Дата и заполненность результата не важны — достаточно появления строки СЗ.
     """
-    today = today or date.today()
     idx_prev = None
     for i, r in enumerate(rows):
         if _contains(r.event, "предварительное судебное заседание"):
@@ -525,19 +516,20 @@ def first_held_main_hearing_no_expertise(
             continue
         if not _is_main_hearing_event(r):
             continue
-        event_day = parse_ru_date(r.date)
-        if event_day is None or event_day > today:
-            continue
-        if not (r.result or "").strip():
-            continue
-        if _is_not_main_track_result(r):
-            continue
         for mid in rows[idx_prev + 1:i]:
-            if _contains(mid.result, "приостановлено") or _contains(mid.event, "приостановлено"):
+            if _is_proceedings_suspended(mid):
                 return None
         return r
     return None
 
 
+def first_held_main_hearing_no_expertise(
+    rows: list[MovementRow],
+    today: Optional[date] = None,
+) -> Optional[MovementRow]:
+    """Совместимость со старым именем: то же, что ТЗ-правило (today не используется)."""
+    return first_main_hearing_after_prelim_without_suspend(rows)
+
+
 def _path_to_main_no_expertise(rows: list[MovementRow], today: Optional[date] = None) -> bool:
-    return first_held_main_hearing_no_expertise(rows, today) is not None
+    return first_main_hearing_after_prelim_without_suspend(rows) is not None
