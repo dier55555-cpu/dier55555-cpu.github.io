@@ -1,0 +1,6 @@
+# Минимальный набор для VPS-сервиса POST /delo (1 GB RAM).
+fastapi
+uvicorn
+requests
+beautifulsoup4
+pydantic

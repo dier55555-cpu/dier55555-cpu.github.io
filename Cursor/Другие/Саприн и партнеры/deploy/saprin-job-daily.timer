@@ -1,0 +1,10 @@
+[Unit]
+Description=Saprin daily timer Mon–Fri 08:30 MSK
+
+[Timer]
+OnCalendar=Mon..Fri *-*-* 08:30:00
+Persistent=true
+Unit=saprin-job-daily.service
+
+[Install]
+WantedBy=timers.target

@@ -1,0 +1,8 @@
+**/.env
+!**/.env.example
+job/data/snapshots.json
+parser/directory/packs/
+parser/directory/*.xlsx
+parser/.last_good_proxy
+**/*.pyc
+**/__pycache__/
