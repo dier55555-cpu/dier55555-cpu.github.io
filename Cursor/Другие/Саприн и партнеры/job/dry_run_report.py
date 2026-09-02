@@ -16,12 +16,15 @@ from zoneinfo import ZoneInfo
 
 from court_pool import CourtParsePool, court_host
 from sudrf_labels import VORONEZH_CITY_RAYON_HOSTS
-from bitrix import Deal, lookup_delo, pull_deals, run_triggers
+from bitrix import Deal, lookup_delo, pull_deals, resolve_stage_ddu, run_triggers
 import bitrix
 from triggers import (
     AUTOMATED_STAGES,
     MANUAL_ONLY_STAGES,
-    is_forward,
+    STAGE_DDU,
+    STAGE_DDU_NAME,
+    can_auto_move,
+    stage_title,
 )
 
 STAGE_TITLE = {
@@ -43,7 +46,9 @@ TZ = ZoneInfo(os.environ.get("TZ") or "Europe/Moscow")
 
 
 def _title(stage_id: str) -> str:
-    return STAGE_TITLE.get(stage_id or "", stage_id or "—")
+    if stage_id and STAGE_DDU and stage_id == STAGE_DDU:
+        return STAGE_DDU_NAME
+    return STAGE_TITLE.get(stage_id or "", stage_title(stage_id) if stage_id else "—")
 
 
 def process_deal(deal: Deal) -> dict:
@@ -95,19 +100,21 @@ def process_deal(deal: Deal) -> dict:
         reason=trig.get("reason"),
         comment=(trig.get("comment") or "")[:500],
         movement_rows=trig.get("movement_rows") or 0,
+        appeal_rows=trig.get("appeal_rows") or 0,
+        alerts=trig.get("alerts") or [],
     )
     if action == "move" and to_stage:
-        row["would_move"] = is_forward(deal.stage_id, to_stage)
+        row["would_move"] = can_auto_move(deal.stage_id, to_stage)
         if not row["would_move"]:
             row["risk"] = "block_backward"
         elif deal.stage_id == "C2:UC_VQSC1C" and to_stage == "C2:UC_GZ6RL3":
-            row["risk"] = "review_jump"  # скачок заседание → решение (допустимо по приоритету)
+            row["risk"] = "review_jump"
         else:
             row["risk"] = "would_move"
     elif action == "stop_manual":
         row["risk"] = "v8_or_manual"
     elif action == "none":
-        row["risk"] = "wait"
+        row["risk"] = "alert" if trig.get("alerts") else "wait"
     return row
 
 
@@ -190,7 +197,8 @@ def write_markdown(rows: list[dict], stats: dict, path: Path) -> None:
         "",
         "- **Автопереход** — на сайте уже есть событие следующего этапа, в CRM сделка ещё на старом. После `DRY_RUN=0` система перенесёт **на один шаг** за прогон.",
         "- **Стоп юристу** — мировое соглашение; автоматика не двигает. "
-        "В8 (апелляция отменила/изменила) — авто в «вступило в силу».",
+        "В8 (апелляция отменила/изменила) — авто в «вступило в силу». "
+        "Ошибка этапа A/B/C — разовое событие в календарь, откатов назад нет.",
         "- **Ждать** — сайт соответствует текущему этапу (или не вышел срок 40/21 день).",
         "- Скачок «заседание → решение» — по ТЗ допустим (приоритет над экспертизой/упрощёнкой).",
         "",
@@ -203,6 +211,8 @@ def main() -> int:
         print("ABORT: DRY_RUN must be 1", file=sys.stderr)
         return 2
     started = datetime.now(TZ)
+    ddu = resolve_stage_ddu()
+    print(f"STAGE_DDU={ddu or 'NOT FOUND'} ({STAGE_DDU_NAME})", flush=True)
     log_dir = Path(os.environ.get("SAPRIN_REPORT_DIR") or "/opt/saprin/logs")
     log_dir.mkdir(parents=True, exist_ok=True)
     stamp = started.strftime("%Y%m%d-%H%M")

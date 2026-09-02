@@ -32,7 +32,10 @@ def test_future_scheduled_hearing_is_main_no_expertise():
     assert d.to_stage == STAGE_MAIN_NO_EXP
 
 
-def test_left_without_consideration_still_main_no_expertise():
+def test_left_without_consideration_goes_to_ddu_not_main():
+    """Без рассмотрения + неявка — в ДДУ, не в «без экспертизы»."""
+    from triggers import set_stage_ddu
+    set_stage_ddu("C2:UC_DDU2025")
     rows = _rows(
         ("Предварительное судебное заседание", "01.06.2026", ""),
         (
@@ -41,9 +44,22 @@ def test_left_without_consideration_still_main_no_expertise():
             "Иск (заявление, жалоба) оставлены без рассмотрения",
         ),
     )
+    # без основания про неявку — остаётся старое правило «без экспертизы»
     d = decide_next_stage(current_stage=STAGE_HEARING, rows=rows, today=TODAY)
     assert d.action == "move"
     assert d.to_stage == STAGE_MAIN_NO_EXP
+
+    rows2 = [
+        MovementRow(event="Предварительное судебное заседание", date="01.06.2026"),
+        MovementRow(
+            event="Судебное заседание",
+            date="12.08.2026",
+            result="Иск (заявление, жалоба) оставлены без рассмотрения",
+            basis="СТОРОНЫ НЕ ЯВИЛИСЬ В СУД ПО ВТОРИЧНОМУ ВЫЗОВУ",
+        ),
+    ]
+    d2 = decide_next_stage(current_stage=STAGE_HEARING, rows=rows2, today=TODAY)
+    assert d2.to_stage == "C2:UC_DDU2025"
 
 
 def test_postponed_hearing_is_main_no_expertise():

@@ -210,6 +210,24 @@ def parse_case_cards(html: str) -> list[CaseCard]:
                 value = " | ".join(parts)
                 current.sections[current_section].append({event: value})
                 continue
+            # ДВИЖЕНИЕ ЖАЛОБЫ / ОБЖАЛОВАНИЕ: Событие | Дата | Результат | Основание | Примечание | Дата размещения
+            # Пустые ячейки сохраняем позиционно (иначе «Направлено…» схлопывает дату размещения в «результат»).
+            if current_section in {
+                "ДВИЖЕНИЕ ЖАЛОБЫ",
+                "ОБЖАЛОВАНИЕ РЕШЕНИЙ, ОПРЕДЕЛЕНИЙ (ПОСТ.)",
+            } and len(cells) >= 2:
+                event = key
+                date = cells[1].strip() if len(cells) > 1 else ""
+                result = cells[2].strip() if len(cells) > 2 else ""
+                reason = cells[3].strip() if len(cells) > 3 else ""
+                note = cells[4].strip() if len(cells) > 4 else ""
+                placed = cells[5].strip() if len(cells) > 5 else ""
+                parts = [date, result, reason, note]
+                if placed:
+                    parts.append(f"размещено {placed}")
+                value = " | ".join(parts)
+                current.sections[current_section].append({event: value})
+                continue
             # Стороны: вид | ФИО/наименование | ИНН | …
             if current_section.startswith("СТОРОНЫ") and len(cells) >= 2:
                 role = key

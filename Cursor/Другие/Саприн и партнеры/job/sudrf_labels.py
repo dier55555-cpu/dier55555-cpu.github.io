@@ -80,6 +80,13 @@ COL_APPEAL_PUBLISHED = "Дата размещения"  # ✓ триггер / �
 # Ключевое поле/строка итога апелляции (ТЗ §1.7)
 APPEAL_RESULT_LABEL = "Результат обжалования"
 
+# События «ДВИЖЕНИЕ ЖАЛОБЫ» (скрины 2-1440/2026 и 2-6720/2025)
+APPEAL_EVENT_REGISTER = "Регистрация жалобы (представления) в суде"
+APPEAL_EVENT_SENT_UP = "Направлено в вышестоящую инстанцию"
+APPEAL_EVENT_ACCEPT_DECISION = "Решение вопроса о принятии жалобы (представления) к рассмотрению"
+APPEAL_RESULT_RETURNED = "Жалоба (предст.) ВОЗВРАЩЕНА"
+APPEAL_BASIS_NONCOMPLIANCE = "НЕСООТВЕТСТВИЕ ТРЕБОВАНИЯМ"
+
 APPEAL_MOVEMENT_COLUMNS = (
     COL_APPEAL_EVENT,
     COL_APPEAL_DATE,
@@ -128,6 +135,16 @@ def is_rayon_appeal_tab(name: str) -> bool:
     if _up(TAB_APPEAL) in u or "ОБЖАЛОВАНИЕ РЕШЕНИЙ" in u:
         return True
     if SECTION_APPEAL_COMPLAINT_PREFIX in u or "ДВИЖЕНИЕ ЖАЛОБЫ" in u:
+        return True
+    return False
+
+
+def is_rayon_appeal_movement_section(name: str) -> bool:
+    """Секция/вкладка, где лежат строки «ДВИЖЕНИЕ ЖАЛОБЫ»."""
+    u = _up(name)
+    if "ДВИЖЕНИЕ ЖАЛОБЫ" in u:
+        return True
+    if _up(TAB_APPEAL) in u or "ОБЖАЛОВАНИЕ РЕШЕНИЙ" in u:
         return True
     return False
 

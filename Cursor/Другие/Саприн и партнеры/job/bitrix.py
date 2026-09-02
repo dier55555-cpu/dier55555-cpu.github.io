@@ -23,13 +23,19 @@ import requests
 from court_pool import CourtParsePool, court_host
 from triggers import (
     AUTOMATED_STAGES,
+    STAGE_DDU_NAME,
+    build_appeal_from_text,
+    build_appeal_movement_from_sections,
     build_movement_from_card_sections,
     build_movement_from_text,
+    can_auto_move,
     decide_next_stage,
     detect_tabs,
-    is_forward,
     parse_ru_date,
+    set_stage_ddu,
 )
+from calendar_alerts import post_stage_alert, probe_calendar
+from triggers import StageAlert
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 logger = logging.getLogger("saprin-bitrix")
@@ -350,13 +356,40 @@ def apply_trigger_fields(decision_fields: dict[str, Any]) -> dict[str, Any]:
     return out
 
 
+def resolve_stage_ddu() -> Optional[str]:
+    """Ищет STAGE_ID «ДДУ 2025 год» в воронке CATEGORY_ID."""
+    env_id = _env("STAGE_DDU")
+    if env_id:
+        set_stage_ddu(env_id)
+        return env_id
+    try:
+        data = _call("crm.dealcategory.stage.list", {"id": CATEGORY_ID})
+    except BitrixError as exc:
+        logger.error("stage.list failed: %s", exc)
+        return None
+    stages = data.get("result") or []
+    needle = STAGE_DDU_NAME.lower()
+    for st in stages:
+        name = str(st.get("NAME") or st.get("STATUS_ID") or "")
+        if needle in name.lower() or ("дду" in name.lower() and "2025" in name):
+            sid = str(st.get("STATUS_ID") or "")
+            if sid:
+                set_stage_ddu(sid)
+                logger.info("Resolved STAGE_DDU=%s (%s)", sid, name)
+                return sid
+    logger.warning("Этап «%s» не найден в category %s", STAGE_DDU_NAME, CATEGORY_ID)
+    return None
+
+
 def run_triggers(deal: Deal, parsed: dict[str, Any]) -> dict[str, Any]:
     """Возвращает decision dict для логов/записи."""
     sections = parsed.get("sections") or {}
     rows = build_movement_from_card_sections(sections)
     if not rows:
         rows = build_movement_from_text(str(parsed.get("result") or ""))
-    # Имена секций/вкладок: точные подписи райсуда из sudrf_labels
+    appeal_rows = build_appeal_movement_from_sections(sections)
+    if not appeal_rows:
+        appeal_rows = build_appeal_from_text(str(parsed.get("result") or ""))
     merged_sections = dict(sections)
     for name in parsed.get("section_names") or []:
         merged_sections.setdefault(str(name), [])
@@ -366,6 +399,7 @@ def run_triggers(deal: Deal, parsed: dict[str, Any]) -> dict[str, Any]:
         current_stage=deal.stage_id,
         rows=rows,
         tabs=tabs,
+        appeal_rows=appeal_rows,
         decision_final_date=parse_ru_date(deal.decision_date or ""),
         decision_published_at=parse_ru_date(deal.decision_published or ""),
         stage_enter_date=parse_ru_date(deal.stage_enter or ""),
@@ -378,7 +412,41 @@ def run_triggers(deal: Deal, parsed: dict[str, Any]) -> dict[str, Any]:
         "comment": decision.comment,
         "fields": decision.fields,
         "movement_rows": len(rows),
+        "appeal_rows": len(appeal_rows),
+        "alerts": [
+            {
+                "kind": a.kind,
+                "current_stage": a.current_stage,
+                "expected_stage": a.expected_stage,
+                "detail": a.detail,
+            }
+            for a in (decision.alerts or [])
+        ],
     }
+
+
+def emit_alerts(deal: Deal, alerts: list[dict[str, Any]] | list[StageAlert]) -> None:
+    for raw in alerts or []:
+        if isinstance(raw, StageAlert):
+            alert = raw
+        else:
+            alert = StageAlert(
+                kind=str(raw.get("kind") or "?"),
+                current_stage=str(raw.get("current_stage") or deal.stage_id),
+                expected_stage=raw.get("expected_stage"),
+                detail=str(raw.get("detail") or ""),
+            )
+        try:
+            post_stage_alert(
+                call=_call,
+                webhook_url=BITRIX_WEBHOOK_URL,
+                deal_id=deal.id,
+                case_number=deal.case_number or "",
+                alert=alert,
+                dry_run=DRY_RUN,
+            )
+        except Exception as exc:  # noqa: BLE001
+            logger.error("calendar alert failed deal=%s: %s", deal.id, exc)
 
 
 def format_comment(deal: Deal, parsed: dict[str, Any], changed: bool, checked_at: str) -> str:
@@ -395,27 +463,42 @@ def format_comment(deal: Deal, parsed: dict[str, Any], changed: bool, checked_at
     return "\n".join(lines)
 
 
-def detect_manual_stage_move(deal: Deal) -> Optional[str]:
-    """§2 ТЗ: сверка STAGE_ID со служебным полем."""
+def detect_manual_stage_move(deal: Deal) -> Optional[tuple[str, StageAlert]]:
+    """§2 ТЗ: сверка STAGE_ID со служебным полем → комментарий + alert C."""
     if not deal.last_known_stage:
         return None
     if deal.last_known_stage == deal.stage_id:
         return None
-    return (
+    note = (
         "[Саприн] Зафиксировано ручное изменение этапа воронки сотрудником. "
         f"Было: {deal.last_known_stage}, стало: {deal.stage_id}. "
         "Мониторинг продолжен по правилам нового этапа."
     )
+    alert = StageAlert(
+        kind="C",
+        current_stage=deal.stage_id,
+        expected_stage=deal.last_known_stage,
+        detail=f"ручной/внешний скачок: {deal.last_known_stage} → {deal.stage_id}",
+    )
+    return note, alert
 
 
 def run_daily_job() -> dict[str, int]:
     stats = {
         "total": 0, "changed": 0, "unchanged": 0, "errors": 0, "skipped": 0,
-        "manual": 0, "moved": 0, "trigger_stop": 0,
+        "manual": 0, "moved": 0, "trigger_stop": 0, "alerts": 0,
     }
     if not BITRIX_WEBHOOK_URL or "YOUR_PORTAL" in BITRIX_WEBHOOK_URL:
         logger.warning("BITRIX_WEBHOOK_URL не задан — прогон пропущен")
         return stats
+
+    ddu = resolve_stage_ddu()
+    logger.info("STAGE_DDU=%s", ddu or "NOT FOUND")
+    try:
+        cal = probe_calendar(_call)
+        logger.info("Calendar probe: %s", cal)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("Calendar probe failed: %s", exc)
 
     hashes = load_local_hashes()
     deals = pull_deals()
@@ -436,10 +519,13 @@ def run_daily_job() -> dict[str, int]:
     for deal in deals:
         checked_at = _now_label()
         today_iso = datetime.now(TZ).date().isoformat()
-        manual_note = detect_manual_stage_move(deal)
-        if manual_note:
+        manual = detect_manual_stage_move(deal)
+        if manual:
+            manual_note, manual_alert = manual
             stats["manual"] += 1
             logger.info("Deal %s manual stage move", deal.id)
+            emit_alerts(deal, [manual_alert])
+            stats["alerts"] += 1
             if not DRY_RUN:
                 comment_timeline(deal.id, manual_note)
                 push_fields(deal.id, {
@@ -465,7 +551,6 @@ def run_daily_job() -> dict[str, int]:
                 reason = str(parsed.get("reason") or "")
                 msg = str(parsed.get("result") or "")
                 logger.info("Deal %s skipped: %s", deal.id, msg)
-                # Нет сайта суда: один раз пишем в ленту (не спамим каждый прогон).
                 if reason == SKIP_NO_COURT_MARKER:
                     already = SKIP_NO_COURT_MARKER in (deal.last_status or "")
                     status_mark = f"{SKIP_NO_COURT_MARKER}: {MSG_NO_COURT}"[:250]
@@ -488,7 +573,6 @@ def run_daily_job() -> dict[str, int]:
                                 f"Проверено: {checked_at}",
                             )
                 elif msg:
-                    # другие skip (мировые и т.п.) — только статус, без ежедневного спама
                     if not DRY_RUN:
                         push_fields(deal.id, {
                             UF_LAST_STATUS: f"skipped: {msg}"[:250],
@@ -521,14 +605,19 @@ def run_daily_job() -> dict[str, int]:
 
         trig = run_triggers(deal, parsed)
         logger.info(
-            "Deal %s trigger action=%s to=%s reason=%s rows=%s",
-            deal.id, trig["action"], trig.get("to_stage"), trig.get("reason"), trig.get("movement_rows"),
+            "Deal %s trigger action=%s to=%s reason=%s rows=%s appeal_rows=%s alerts=%s",
+            deal.id, trig["action"], trig.get("to_stage"), trig.get("reason"),
+            trig.get("movement_rows"), trig.get("appeal_rows"), len(trig.get("alerts") or []),
         )
+
+        if trig.get("alerts"):
+            emit_alerts(deal, trig["alerts"])
+            stats["alerts"] += len(trig["alerts"])
 
         if DRY_RUN:
             logger.info(
-                "DRY_RUN deal %s %s changed=%s trigger=%s",
-                deal.id, deal.case_number, changed, trig["action"],
+                "DRY_RUN deal %s %s changed=%s trigger=%s to=%s",
+                deal.id, deal.case_number, changed, trig["action"], trig.get("to_stage"),
             )
         else:
             fields = {
@@ -539,13 +628,12 @@ def run_daily_job() -> dict[str, int]:
                 UF_COURT_WEBSITE: deal.court_website or "",
             }
             fields.update(apply_trigger_fields(trig.get("fields") or {}))
-            # если ещё нет даты входа в этап — зафиксируем
             if not deal.stage_enter:
                 fields[UF_STAGE_ENTER] = today_iso
 
             if trig["action"] == "move" and trig.get("to_stage") and APPLY_STAGE_MOVES:
                 to_stage = trig["to_stage"]
-                if is_forward(deal.stage_id, to_stage):
+                if can_auto_move(deal.stage_id, to_stage):
                     move_stage(deal.id, to_stage)
                     fields[UF_LAST_KNOWN_STAGE] = to_stage
                     fields[UF_STAGE_ENTER] = today_iso
@@ -558,7 +646,7 @@ def run_daily_job() -> dict[str, int]:
                         f"{comment}"
                     )
                 else:
-                    logger.warning("Deal %s refuse non-forward move %s→%s", deal.id, deal.stage_id, to_stage)
+                    logger.warning("Deal %s refuse non-allowed move %s→%s", deal.id, deal.stage_id, to_stage)
             elif trig["action"] == "stop_manual":
                 stats["trigger_stop"] += 1
                 comment = f"[Саприн] {trig.get('comment')}\n\n{comment}"

@@ -1,13 +1,14 @@
 """Граф переходов воронки «Исполнение» по ТЗ v2.9 §1–2.
 
 Детерминированные правила: только сравнение текстов/дат, без ИИ.
-В8 (апелляция отменила/изменила): по ответу юриста — сразу
-«Решение вступило в законную силу» (в этой категории дел не было
-направления на новое рассмотрение; после апелляции сила всё равно наступает).
+В8 (апелляция отменила/изменила): сразу «Решение вступило в законную силу».
+Апелляция: только по «ДВИЖЕНИЕ ЖАЛОБЫ» (не по факту вкладки).
+Откатов назад нет — при ошибке этапа только уведомление в календарь.
 """
 
 from __future__ import annotations
 
+import os
 import re
 from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta
@@ -27,6 +28,10 @@ STAGE_APPEAL = "C2:UC_YJ087T"           # Дело в апелляции
 STAGE_IN_FORCE = "C2:UC_2M4FYU"         # Решение вступило в законную силу
 STAGE_REQUEST_IL = "C2:UC_B2ZGR1"       # Запросить исполнительный лист
 STAGE_GOT_IL = "C2:UC_ILS0X3"           # Исполнительный лист получен
+
+# «ДДУ 2025 год» — та же воронка; ID подтягивается с портала / STAGE_DDU
+STAGE_DDU_NAME = "ДДУ 2025 год"
+STAGE_DDU = (os.environ.get("STAGE_DDU") or "").strip()
 
 # Порядок «вперёд» по воронке (для запрета отката автоматикой)
 STAGE_ORDER = [
@@ -54,6 +59,38 @@ MANUAL_ONLY_STAGES = {
     STAGE_EXPERTISE_DATE, STAGE_SETTLEMENT,
 }
 
+STAGE_TITLE = {
+    STAGE_HEARING: "Назначена дата заседания",
+    STAGE_SIMPLIFIED: "Упрощенное производство",
+    STAGE_EXPERTISE: "Назначена судебная экспертиза",
+    STAGE_EXPERTISE_DATE: "Назначена дата экспертизы (ручной)",
+    STAGE_FROM_EXPERTISE: "Дело вернулось с экспертизы",
+    STAGE_MAIN_NO_EXP: "Без судебной экспертизы, основное",
+    STAGE_SETTLEMENT: "Согласовано мировое (ручной)",
+    STAGE_DECISION: "Вынесено решение",
+    STAGE_APPEAL: "Дело в апелляции",
+    STAGE_IN_FORCE: "Решение вступило в законную силу",
+    STAGE_REQUEST_IL: "Запросить исполнительный лист",
+    STAGE_GOT_IL: "Исполнительный лист получен",
+}
+
+
+def set_stage_ddu(stage_id: str) -> None:
+    """Фиксирует STAGE_ID «ДДУ 2025 год» после lookup на портале."""
+    global STAGE_DDU
+    STAGE_DDU = (stage_id or "").strip()
+    if STAGE_DDU:
+        STAGE_TITLE[STAGE_DDU] = STAGE_DDU_NAME
+        AUTOMATED_STAGES.discard(STAGE_DDU)  # конечная колонка — не крутим дальше
+
+
+def stage_title(stage_id: str) -> str:
+    if not stage_id:
+        return "—"
+    if stage_id == STAGE_DDU:
+        return STAGE_DDU_NAME
+    return STAGE_TITLE.get(stage_id, stage_id)
+
 
 @dataclass
 class MovementRow:
@@ -68,12 +105,22 @@ class MovementRow:
 
 
 @dataclass
+class StageAlert:
+    """Разовое уведомление в календарь Bitrix (ошибка этапа)."""
+    kind: str  # A | B | C
+    current_stage: str
+    expected_stage: Optional[str]
+    detail: str = ""
+
+
+@dataclass
 class TriggerDecision:
     action: str  # none | move | stop_manual | comment_only
     to_stage: Optional[str] = None
     comment: str = ""
     reason: str = ""
     fields: dict[str, Any] = field(default_factory=dict)
+    alerts: list[StageAlert] = field(default_factory=list)
 
 
 def _norm(s: str) -> str:
@@ -117,6 +164,19 @@ def is_forward(from_stage: str, to_stage: str) -> bool:
     return b > a
 
 
+def can_auto_move(from_stage: str, to_stage: str) -> bool:
+    """Вперёд по воронке ИЛИ явный боковой ход на «ДДУ 2025 год»."""
+    if not to_stage:
+        return False
+    if is_forward(from_stage, to_stage):
+        return True
+    if STAGE_DDU and to_stage == STAGE_DDU and from_stage in {
+        STAGE_HEARING, STAGE_MAIN_NO_EXP,
+    }:
+        return True
+    return False
+
+
 def latest_matching(rows: list[MovementRow], pred) -> Optional[MovementRow]:
     for row in reversed(rows):
         if pred(row):
@@ -140,11 +200,21 @@ def comment_from_row(prefix: str, row: MovementRow) -> str:
     return prefix + " ".join(parts)
 
 
-def build_movement_from_card_sections(sections: dict) -> list[MovementRow]:
-    """Из секций CaseCard (ключ события → 'дата | время | … | размещено …').
+def _parse_pipe_blob(blob: str) -> tuple[str, list[str], str]:
+    parts = [p.strip() for p in str(blob).split("|")]
+    published = ""
+    cleaned: list[str] = []
+    for p in parts:
+        if p.lower().startswith("размещено"):
+            published = p.split(" ", 1)[-1].strip() if " " in p else p
+        else:
+            cleaned.append(p)
+    date_s = cleaned[0] if cleaned else ""
+    return date_s, cleaned[1:], published
 
-    Берём только вкладку «ДВИЖЕНИЕ ДЕЛА», не «ДВИЖЕНИЕ ЖАЛОБЫ».
-    """
+
+def build_movement_from_card_sections(sections: dict) -> list[MovementRow]:
+    """Из секций CaseCard. Только вкладка «ДВИЖЕНИЕ ДЕЛА»."""
     try:
         from sudrf_labels import is_rayon_movement_tab
     except ImportError:  # pragma: no cover
@@ -158,33 +228,31 @@ def build_movement_from_card_sections(sections: dict) -> list[MovementRow]:
             if not isinstance(item, dict):
                 continue
             for event, blob in item.items():
-                parts = [p.strip() for p in str(blob).split("|")]
-                published = ""
-                cleaned = []
-                for p in parts:
-                    if p.lower().startswith("размещено"):
-                        published = p.split(" ", 1)[-1].strip() if " " in p else p
-                    else:
-                        cleaned.append(p)
-                # эвристика: date, time, place?, result, basis…
-                date_s = cleaned[0] if len(cleaned) > 0 else ""
-                time_s = cleaned[1] if len(cleaned) > 1 else ""
-                rest = cleaned[2:]
+                date_s, rest, published = _parse_pipe_blob(str(blob))
+                time_s = rest[0] if len(rest) > 0 else ""
+                # эвристика: time?, place?, result, basis…
+                # после date: time, place?, result, basis
                 result = ""
                 basis = ""
                 place = ""
-                if rest:
-                    # если 3+ хвоста: место, результат, основание
-                    if len(rest) >= 3:
-                        place, result, basis = rest[0], rest[1], rest[2]
-                    elif len(rest) == 2:
-                        # часто результат + основание ИЛИ место + результат
-                        if _contains(rest[0], "назнача", "приостан", "возобнов", "вынесен", "иск", "определ"):
-                            result, basis = rest[0], rest[1]
+                tail = rest[1:] if rest else []
+                # если первый rest похож на время HH:MM — это время
+                if rest and re.match(r"^\d{1,2}:\d{2}", rest[0] or ""):
+                    time_s = rest[0]
+                    tail = rest[1:]
+                else:
+                    time_s = ""
+                    tail = rest
+                if tail:
+                    if len(tail) >= 3:
+                        place, result, basis = tail[0], tail[1], tail[2]
+                    elif len(tail) == 2:
+                        if _contains(tail[0], "назнача", "приостан", "возобнов", "вынесен", "иск", "определ", "оставлен"):
+                            result, basis = tail[0], tail[1]
                         else:
-                            place, result = rest[0], rest[1]
+                            place, result = tail[0], tail[1]
                     else:
-                        result = rest[0]
+                        result = tail[0]
                 rows.append(MovementRow(
                     event=str(event).strip(),
                     date=date_s,
@@ -192,6 +260,49 @@ def build_movement_from_card_sections(sections: dict) -> list[MovementRow]:
                     place=place,
                     result=result,
                     basis=basis,
+                    published_at=published,
+                ))
+    return rows
+
+
+def build_appeal_movement_from_sections(sections: dict) -> list[MovementRow]:
+    """Строки «ДВИЖЕНИЕ ЖАЛОБЫ» / вкладки обжалования.
+
+    Колонки: Событие | Дата | Результат | Основание | Примечание | Дата размещения.
+    """
+    try:
+        from sudrf_labels import is_rayon_appeal_movement_section
+    except ImportError:  # pragma: no cover
+        from job.sudrf_labels import is_rayon_appeal_movement_section  # type: ignore
+
+    rows: list[MovementRow] = []
+    for name, items in (sections or {}).items():
+        if not is_rayon_appeal_movement_section(str(name)):
+            continue
+        for item in items or []:
+            if not isinstance(item, dict):
+                continue
+            for event, blob in item.items():
+                ev = str(event).strip()
+                # шапка жалобы — не строки движения
+                if _contains(ev, "вид жалобы", "заявитель", "вышестоящий суд", "жалоба №"):
+                    continue
+                date_s, rest, published = _parse_pipe_blob(str(blob))
+                result, basis, note = "", "", ""
+                if len(rest) >= 3:
+                    result, basis, note = rest[0], rest[1], rest[2]
+                elif len(rest) == 2:
+                    result, basis = rest[0], rest[1]
+                elif len(rest) == 1:
+                    # одно поле: либо результат, либо схлопнутая дата размещения
+                    if not re.match(r"^\d{2}\.\d{2}\.\d{4}$", rest[0] or ""):
+                        result = rest[0]
+                rows.append(MovementRow(
+                    event=ev,
+                    date=date_s,
+                    result=result,
+                    basis=basis,
+                    note=note,
                     published_at=published,
                 ))
     return rows
@@ -219,6 +330,29 @@ def build_movement_from_text(result_text: str) -> list[MovementRow]:
     return rows
 
 
+def build_appeal_from_text(result_text: str) -> list[MovementRow]:
+    """Fallback: блок «--- ОБЖАЛОВАНИЕ… ---» / строки жалобы в тексте карточки."""
+    rows: list[MovementRow] = []
+    in_block = False
+    for line in (result_text or "").splitlines():
+        s = line.strip()
+        low = s.lower()
+        if "обжалование решений" in low or "движение жалобы" in low:
+            in_block = True
+            continue
+        if in_block and s.startswith("---") and "обжалование" not in low and "жалоб" not in low:
+            break
+        if not in_block:
+            continue
+        m = re.match(r"^(?:\d+\.\s*)?(.+?):\s*(.*)$", s)
+        if not m:
+            continue
+        event, blob = m.group(1).strip(), m.group(2).strip()
+        fake = {"ДВИЖЕНИЕ ЖАЛОБЫ": [{event: blob}]}
+        rows.extend(build_appeal_movement_from_sections(fake))
+    return rows
+
+
 def detect_tabs(result_text: str, sections: Optional[dict] = None) -> dict[str, bool]:
     """Детект вкладок райсуда по точным именам (job/sudrf_labels.py)."""
     try:
@@ -242,11 +376,33 @@ def detect_tabs(result_text: str, sections: Optional[dict] = None) -> dict[str, 
     return {"appeal": appeal, "il": il, "acts": acts}
 
 
+def is_complaint_sent_up(row: MovementRow) -> bool:
+    return _contains(row.event, "направлено в вышестоящую инстанцию")
+
+
+def is_complaint_returned_noncompliance(row: MovementRow) -> bool:
+    return (
+        _contains(row.event, "решение вопроса о принятии жалобы")
+        and _contains(row.result, "возвращена")
+        and _contains(row.basis, "несоответств")
+    )
+
+
+def is_left_without_consideration_parties_absent(row: MovementRow) -> bool:
+    """Шайкин и аналоги: без рассмотрения + неявка сторон."""
+    if not _is_main_hearing_event(row):
+        return False
+    if not _contains(row.result, "без рассмотрения"):
+        return False
+    return _contains(row.basis, "не явил", "неявка", "не явились")
+
+
 def decide_next_stage(
     *,
     current_stage: str,
     rows: list[MovementRow],
     tabs: Optional[dict[str, bool]] = None,
+    appeal_rows: Optional[list[MovementRow]] = None,
     today: Optional[date] = None,
     stage_enter_date: Optional[date] = None,
     decision_final_date: Optional[date] = None,
@@ -256,6 +412,11 @@ def decide_next_stage(
     """Главная функция графа. Никогда не двигает назад."""
     today = today or date.today()
     tabs = tabs or {}
+    appeal_rows = appeal_rows or []
+    alerts: list[StageAlert] = []
+
+    sent_up = latest_matching(appeal_rows, is_complaint_sent_up)
+    returned = latest_matching(appeal_rows, is_complaint_returned_noncompliance)
 
     # --- Этап 2: Назначена дата заседания — развилка по приоритету ---
     if current_stage == STAGE_HEARING:
@@ -299,10 +460,30 @@ def decide_next_stage(
                 ),
                 reason="hearing→simplified",
             )
-        # 4) ТЗ: после предзаседания есть «Судебное заседание» и между ними
-        #    нет приостановления производства → «Без судебной экспертизы, основное».
+        # 4) Без рассмотрения + неявка сторон → «ДДУ 2025 год»
+        row = latest_matching(rows, is_left_without_consideration_parties_absent)
+        if row:
+            if not STAGE_DDU:
+                return TriggerDecision(
+                    action="none",
+                    comment=comment_from_row("", row),
+                    reason="hearing→ddu: STAGE_DDU не задан",
+                    alerts=[StageAlert(
+                        kind="B",
+                        current_stage=current_stage,
+                        expected_stage=None,
+                        detail=f"нужен этап «{STAGE_DDU_NAME}», STAGE_DDU не найден на портале",
+                    )],
+                )
+            return TriggerDecision(
+                action="move",
+                to_stage=STAGE_DDU,
+                comment=comment_from_row("", row),
+                reason="hearing→ddu: без рассмотрения + неявка",
+            )
+        # 5) ТЗ: после предзаседания есть «Судебное заседание» без приостановления
         main_row = first_main_hearing_after_prelim_without_suspend(rows)
-        if main_row:
+        if main_row and not is_left_without_consideration_parties_absent(main_row):
             return TriggerDecision(
                 action="move",
                 to_stage=STAGE_MAIN_NO_EXP,
@@ -322,9 +503,8 @@ def decide_next_stage(
             )
         return TriggerDecision(action="none", comment="без изменений", reason="simplified: no trigger")
 
-    # --- Этап 4: Экспертиза → (ручная дата) → возврат с экспертизы ---
+    # --- Этап 4: Экспертиза → возврат с экспертизы ---
     if current_stage == STAGE_EXPERTISE:
-        # автоматика сама дату экспертизы не ставит; ждём «возобновлено» после назначения экспертизы
         row = latest_matching(rows, lambda r: _contains(r.result, "производство по делу возобновлено") or _contains(r.event, "возобновлено"))
         if row and _had_expertise_suspend(rows):
             return TriggerDecision(
@@ -345,6 +525,28 @@ def decide_next_stage(
 
     # --- Этап 5а: Без экспертизы, основное ---
     if current_stage == STAGE_MAIN_NO_EXP:
+        # Ошибка B: сюда попали дела «без рассмотрения + неявка» — в ДДУ, не откат словами
+        row_bad = latest_matching(rows, is_left_without_consideration_parties_absent)
+        if row_bad:
+            if STAGE_DDU and can_auto_move(current_stage, STAGE_DDU):
+                return TriggerDecision(
+                    action="move",
+                    to_stage=STAGE_DDU,
+                    comment=comment_from_row("", row_bad),
+                    reason="main→ddu: без рассмотрения + неявка",
+                    alerts=[StageAlert(
+                        kind="B",
+                        current_stage=current_stage,
+                        expected_stage=STAGE_DDU,
+                        detail="ошибочно на «без экспертизы»; сайт: без рассмотрения + неявка",
+                    )],
+                )
+            alerts.append(StageAlert(
+                kind="B",
+                current_stage=current_stage,
+                expected_stage=STAGE_DDU or None,
+                detail="сайт: без рассмотрения + неявка — нужен «ДДУ 2025 год»",
+            ))
         row_settle = latest_matching(rows, lambda r: (
             _contains(r.result, "производство по делу прекращено")
             and _contains(r.basis, "мировое")
@@ -357,6 +559,7 @@ def decide_next_stage(
                     "Этап «Согласовано мировое» — только вручную."
                 ),
                 reason="main→settlement manual",
+                alerts=alerts,
             )
         row = latest_matching(rows, lambda r: _contains(r.result, "вынесено решение"))
         if row:
@@ -364,10 +567,11 @@ def decide_next_stage(
                 action="move", to_stage=STAGE_DECISION,
                 comment=comment_from_row("", row), reason="main→decision",
                 fields=_decision_fields(row),
+                alerts=alerts,
             )
-        return TriggerDecision(action="none", comment="без изменений", reason="main: no trigger")
+        return TriggerDecision(action="none", comment="без изменений", reason="main: no trigger", alerts=alerts)
 
-    # --- Этап 6: Вынесено решение — 40 дней / апелляция ---
+    # --- Этап 6: Вынесено решение — апелляция по событиям жалобы / 40 дней ---
     if current_stage == STAGE_DECISION:
         d = decision_final_date
         if d is None:
@@ -389,14 +593,32 @@ def decide_next_stage(
             fields = {}
             pub = decision_published_at
 
-        if tabs.get("appeal"):
+        # 1) Направлено в вышестоящую инстанцию → апелляция
+        if sent_up:
             return TriggerDecision(
                 action="move", to_stage=STAGE_APPEAL,
-                comment="На основании данных с сайта суда появилась вкладка «ОБЖАЛОВАНИЕ РЕШЕНИЙ, ОПРЕДЕЛЕНИЙ (ПОСТ.)».",
-                reason="decision→appeal: tab ОБЖАЛОВАНИЕ РЕШЕНИЙ, ОПРЕДЕЛЕНИЙ (ПОСТ.)",
+                comment=(
+                    "На основании данных с сайта суда, в «ДВИЖЕНИЕ ЖАЛОБЫ» появилось событие "
+                    "«Направлено в вышестоящую инстанцию»"
+                    + (f", дата: {sent_up.date}" if sent_up.date else "")
+                    + "."
+                ),
+                reason="decision→appeal: направлено в вышестоящую инстанцию",
                 fields=fields,
             )
-        # 40 дней от даты изготовления (D)
+        # 2) Жалоба возвращена за несоответствие — остаёмся на «Вынесено решение»
+        if returned:
+            return TriggerDecision(
+                action="none",
+                comment=(
+                    "На основании данных с сайта суда, жалоба возвращена "
+                    "(несоответствие требованиям). Этап «Дело в апелляции» не ставим."
+                ),
+                reason="decision: appeal returned noncompliance — stay",
+                fields=fields,
+            )
+        # 3) Только вкладка/регистрация без «направлено» — ждём (больше не двигаем по вкладке)
+        # 4) 40 дней → вступило в силу
         if d and today >= d + timedelta(days=40):
             return TriggerDecision(
                 action="move", to_stage=STAGE_IN_FORCE,
@@ -407,16 +629,41 @@ def decide_next_stage(
                 reason="decision→in_force: 40 days",
                 fields=fields,
             )
-        return TriggerDecision(action="none", comment="без изменений", reason="decision: waiting 40d/appeal", fields=fields)
+        return TriggerDecision(
+            action="none", comment="без изменений",
+            reason="decision: waiting 40d/appeal sent-up", fields=fields,
+        )
 
     # --- Этап 7: Апелляция ---
     if current_stage == STAGE_APPEAL:
+        # Ошибка A: в CRM апелляция, а на сайте возврат / нет «направлено» — этап не откатываем
+        if returned and not sent_up:
+            alerts.append(StageAlert(
+                kind="A",
+                current_stage=current_stage,
+                expected_stage=STAGE_DECISION,
+                detail="жалоба возвращена (несоответствие требованиям); «направлено выше» нет",
+            ))
+        elif appeal_rows and not sent_up and not returned:
+            # вкладка/регистрация есть, но в вышестоящую не ушло
+            if not any(is_complaint_sent_up(r) for r in appeal_rows):
+                alerts.append(StageAlert(
+                    kind="A",
+                    current_stage=current_stage,
+                    expected_stage=STAGE_DECISION,
+                    detail="нет события «Направлено в вышестоящую инстанцию»",
+                ))
+
         ar = (appeal_result or "").strip()
         if not ar:
-            # попробуем из движения
             row = latest_matching(rows, lambda r: _contains(r.event, "результат обжалования") or _contains(r.result, "оставлено без изменения", "отменено", "изменено"))
             if row:
                 ar = row.result or row.event
+            # также из строк жалобы
+            if not ar:
+                row_a = latest_matching(appeal_rows, lambda r: _contains(r.event, "результат обжалования") or _contains(r.result, "оставлено без изменения", "отменено", "изменено"))
+                if row_a:
+                    ar = row_a.result or row_a.event
         if ar:
             if _contains(ar, "без изменения", "оставлено без изменения"):
                 return TriggerDecision(
@@ -424,8 +671,8 @@ def decide_next_stage(
                     comment=f"На основании данных с сайта суда, результат обжалования: {ar}",
                     reason="appeal→in_force: unchanged",
                     fields={"appeal_result": ar},
+                    alerts=alerts,
                 )
-            # В8: отмена/изменение — тоже в силу (ответ юриста 01.09.2026)
             if _contains(ar, "отмен", "изменен", "изменён"):
                 return TriggerDecision(
                     action="move", to_stage=STAGE_IN_FORCE,
@@ -435,8 +682,12 @@ def decide_next_stage(
                     ),
                     reason="appeal→in_force: cancelled/changed (V8)",
                     fields={"appeal_result": ar},
+                    alerts=alerts,
                 )
-        return TriggerDecision(action="none", comment="без изменений", reason="appeal: waiting result")
+        return TriggerDecision(
+            action="none", comment="без изменений",
+            reason="appeal: waiting result", alerts=alerts,
+        )
 
     # --- Этап 8: Вступило в силу → через 21 день запросить ИЛ ---
     if current_stage == STAGE_IN_FORCE:
@@ -469,6 +720,9 @@ def decide_next_stage(
     if current_stage == STAGE_GOT_IL:
         return TriggerDecision(action="none", comment="конец автоматизации", reason="got_il: done")
 
+    if STAGE_DDU and current_stage == STAGE_DDU:
+        return TriggerDecision(action="none", comment="ДДУ 2025 год — конец ветки", reason="ddu: done")
+
     if current_stage in MANUAL_ONLY_STAGES:
         return TriggerDecision(action="none", comment="этап ручной — автоматика не меняет", reason="manual stage")
 
@@ -477,7 +731,6 @@ def decide_next_stage(
 
 def _decision_fields(row: MovementRow) -> dict[str, Any]:
     fields: dict[str, Any] = {}
-    # если это строка изготовления — заполним даты
     if _contains(row.event, "изготовлено мотивированное решение"):
         d = parse_ru_date(row.date)
         fields["decision_date"] = row.date
@@ -507,9 +760,8 @@ def _is_proceedings_suspended(row: MovementRow) -> bool:
 def first_main_hearing_after_prelim_without_suspend(
     rows: list[MovementRow],
 ) -> Optional[MovementRow]:
-    """Вкладка «ДВИЖЕНИЕ ДЕЛА»: после «Предварительное судебное заседание»
-    есть «Судебное заседание», между ними нет приостановления производства.
-    Дата и заполненность результата не важны — достаточно появления строки СЗ.
+    """После «Предварительное судебное заседание» есть «Судебное заседание»
+    без приостановления между ними. Дата/результат не важны.
     """
     idx_prev = None
     for i, r in enumerate(rows):
@@ -530,9 +782,23 @@ def first_held_main_hearing_no_expertise(
     rows: list[MovementRow],
     today: Optional[date] = None,
 ) -> Optional[MovementRow]:
-    """Совместимость со старым именем: то же, что ТЗ-правило (today не используется)."""
     return first_main_hearing_after_prelim_without_suspend(rows)
 
 
 def _path_to_main_no_expertise(rows: list[MovementRow], today: Optional[date] = None) -> bool:
     return first_main_hearing_after_prelim_without_suspend(rows) is not None
+
+
+def format_calendar_alert_name(
+    *,
+    case_number: str,
+    current_stage: str,
+    expected_stage: Optional[str],
+    deal_url: str,
+) -> str:
+    was = stage_title(current_stage)
+    should = stage_title(expected_stage) if expected_stage else STAGE_DDU_NAME
+    return (
+        f"обратить внимание на стадию процесса - возможна ошибка "
+        f"[{case_number or '—'}][{was} → {should}][{deal_url}]"
+    )
