@@ -28,6 +28,7 @@ if [[ -f "$ROOT/parser/directory/courts-ru.json" ]]; then
 fi
 "${scp_cmd[@]}" "$ROOT/job/bitrix.py" "$ROOT/job/triggers.py" "$ROOT/job/sudrf_labels.py" \
   "$ROOT/job/create_uf_fields.py" "$ROOT/job/court_pool.py" "$ROOT/job/dry_run_report.py" \
+  "$ROOT/job/calendar_alerts.py" "$ROOT/job/probe_bitrix.py" \
   "$ROOT/job/requirements.txt" "$ROOT/job/.env.example" \
   "${REMOTE_USER}@${HOST}:/opt/saprin/job/"
 
