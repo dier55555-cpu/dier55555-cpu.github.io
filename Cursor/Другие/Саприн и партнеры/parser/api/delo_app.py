@@ -448,6 +448,15 @@ def _case_with_channels(domain: str, query: CaseQuery, production_type: str):
         return False
 
     failed: set[str] = set()
+    # last_good раньше аренды из очереди: очередь FIFO не знает про «удачный» порт
+    with _proxy_lock:
+        good = _last_good_proxy
+    if good and good in pool:
+        result = _run(good)
+        if _done(result, good):
+            return last_result, used
+        failed.add(good)
+
     for _ in range(max_proxy_attempts):
         channel: Optional[str] = None
         try:
