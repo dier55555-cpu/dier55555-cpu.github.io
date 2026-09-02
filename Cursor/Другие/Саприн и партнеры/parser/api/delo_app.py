@@ -381,25 +381,34 @@ def delo_lookup(payload: CaseLookupRequest, x_api_key: Optional[str] = Header(de
 
 
 def _case_with_channels(domain: str, query: CaseQuery, production_type: str):
-    """Один sticky-порт на запрос (аренда из пула), затем direct.
+    """Sticky-порты из пула (до 3 попыток), direct только если пул пуст или явно разрешён.
 
-    При 6 параллельных /delo — 6 разных исходящих IP (порты 10000–10009).
+    При 6 параллельных /delo — разные исходящие IP (порты 10000–10009).
+    Мёртвый порт (407/503/tunnel) не должен сразу уводить на IP VPS: sudrf
+    с direct часто таймаутит, а соседний sticky того же аккаунта ещё живой.
     """
     last_result = None
     used = ""
-    t_budget = time.monotonic() + 50.0
-    try:
-        lease_cm = lease_sticky_proxy(timeout=20.0)
-    except Exception:
-        lease_cm = None
+    tried_ports: list[str] = []
+    # Residential CONNECT + sudrf search часто 5–15с; 3×короткий timeout = ложный error.
+    t_budget = time.monotonic() + 70.0
+    pool = _ordered_proxies()
+    allow_direct = (not pool) or os.environ.get("COURT_KB_ALLOW_DIRECT", "0").strip() in {
+        "1",
+        "true",
+        "yes",
+    }
+    max_proxy_attempts = min(4, len(pool)) if pool else 0
 
     def _run(channel: Optional[str]):
         nonlocal last_result, used
         if time.monotonic() >= t_budget:
             return None
-        remaining = max(5.0, t_budget - time.monotonic())
-        read_timeout = min(18.0, remaining)
-        timeout = (4.0, read_timeout)
+        remaining = max(8.0, t_budget - time.monotonic())
+        # connect через pool.proxy.market часто >4с; read на modules.php — до ~20с
+        connect_timeout = 10.0
+        read_timeout = min(22.0, remaining)
+        timeout = (connect_timeout, read_timeout)
         if channel is None:
             fetcher = Fetcher(
                 proxy_urls=[],
@@ -408,6 +417,7 @@ def _case_with_channels(domain: str, query: CaseQuery, production_type: str):
                 max_retries=1,
             )
             used_label = ""
+            tried_ports.append("direct")
         else:
             fetcher = Fetcher(
                 proxy_urls=[channel],
@@ -416,6 +426,7 @@ def _case_with_channels(domain: str, query: CaseQuery, production_type: str):
                 max_retries=1,
             )
             used_label = channel
+            tried_ports.append(_proxy_port(channel))
         result = search_case_direct(
             fetcher,
             domain,
@@ -426,16 +437,44 @@ def _case_with_channels(domain: str, query: CaseQuery, production_type: str):
         used = used_label
         return result
 
-    if lease_cm is not None:
-        with lease_cm as channel:
+    def _done(result, channel: Optional[str]) -> bool:
+        if result is None:
+            return False
+        # unavailable = сбой ГАС у всех IP — крутить порты бессмысленно
+        if result.status in {"found", "not_found", "unavailable", "blocked"}:
+            if result.status == "found" and channel:
+                _save_last_good_proxy(channel)
+            return True
+        return False
+
+    failed: set[str] = set()
+    for _ in range(max_proxy_attempts):
+        channel: Optional[str] = None
+        try:
+            with lease_sticky_proxy(timeout=12.0) as leased:
+                channel = leased
+                if channel is None or channel in failed:
+                    # пул пуст или повторно выдали уже мёртвый — берём из списка
+                    channel = next((u for u in pool if u not in failed), None)
+                if channel is None:
+                    break
+                result = _run(channel)
+                if _done(result, channel):
+                    return last_result, used
+                failed.add(channel)
+        except Exception:
+            # очередь занята / таймаут аренды — пробуем без эксклюзивной аренды
+            channel = next((u for u in pool if u not in failed), None)
+            if channel is None:
+                break
             result = _run(channel)
-            if result is not None and result.status in {"found", "not_found"}:
-                if result.status == "found" and channel:
-                    _save_last_good_proxy(channel)
+            if _done(result, channel):
                 return last_result, used
-            result = _run(None)
-            return last_result, used
-    result = _run(None)
+            failed.add(channel)
+
+    if allow_direct:
+        _run(None)
+
     if last_result is None:
         return (
             CaseSearchResult(
@@ -445,5 +484,11 @@ def _case_with_channels(domain: str, query: CaseQuery, production_type: str):
                 "Попробуйте позже или откройте карточку вручную на сайте суда.",
             ),
             used,
+        )
+    if tried_ports and last_result.status == "error":
+        log.warning(
+            "delo channels exhausted domain=%s tried=%s",
+            domain,
+            "→".join(tried_ports),
         )
     return last_result, used

@@ -49,15 +49,32 @@ bash scripts/deploy.sh
 
 На VPS: `/opt/saprin/parser/.env` (`COURT_KB_PROXY=…`), `/opt/saprin/job/.env` (webhook, `DRY_RUN=1`), `/opt/saprin/job/.env.proxy`.
 
+**Источник истины для sudrf — `COURT_KB_PROXY` в `parser/.env`.**  
+`job/.env.proxy` (`HTTP_PROXY` / `PROXY_USER`) не должен расходиться по логину: иначе легко получить 407 и тихий уход в `port=direct`.
+
 ```bash
 systemctl restart saprin-parser
 systemctl enable --now saprin-job-weekly.timer saprin-job-daily.timer
 ```
 
+## Прокси: как проверить
+
+```bash
+# на VPS — до DRY_RUN / прод-джоба
+/opt/saprin/venv/bin/python /opt/saprin/job/probe_proxy.py
+# OK: auth_ok>0 и sudrf_ok>0
+# FAIL 407: неверный логин/пароль в кабинете proxy.market → поправить COURT_KB_PROXY, restart parser
+journalctl -u saprin-parser -n 50 | grep -E 'port=|channels exhausted|407'
+```
+
+Признаки поломки: в логах массово `port=direct` / `channels exhausted`, в job — таймауты «Судебное делопроизводство».  
+Парсер пробует до 3 sticky-портов; `direct` с IP VPS по умолчанию **выключен**, если пул прокси непустой (`COURT_KB_ALLOW_DIRECT=1` — вернуть старое поведение).
+
 ## Ручной прогон
 
 ```bash
 curl -sS http://127.0.0.1:8081/health
+/opt/saprin/venv/bin/python /opt/saprin/job/probe_proxy.py
 curl -sS http://127.0.0.1:8081/delo -H 'Content-Type: application/json' \
   -d '{"case_number":"2-6302/2024","website":"https://kominternovsky--vrn.sudrf.ru/"}'
 
