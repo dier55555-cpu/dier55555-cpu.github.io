@@ -37,8 +37,8 @@ saprin-parser.service  (api.delo_app, :8081, sync-handlers в threadpool)
 
 | Unit | Когда | Этапы |
 |---|---|---|
-| `saprin-job-weekly.timer` | Пн 08:00 | до «Вынесено решение» |
-| `saprin-job-daily.timer` | Пн–Пт 08:30 | с «Вынесено решение» и далее |
+| `saprin-job-weekly.timer` | Пн **05:00** | до «Вынесено решение» |
+| `saprin-job-daily.timer` | Пн–Пт **07:00** | с «Вынесено решение» и далее |
 
 ## Деплой
 

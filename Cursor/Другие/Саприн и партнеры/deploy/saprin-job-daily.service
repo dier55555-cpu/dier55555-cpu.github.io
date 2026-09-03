@@ -1,5 +1,5 @@
 [Unit]
-Description=Saprin Bitrix job — daily stages (Mon–Fri 08:30)
+Description=Saprin Bitrix job — daily stages (Mon–Fri 07:00)
 After=network-online.target saprin-parser.service
 Wants=network-online.target saprin-parser.service
 

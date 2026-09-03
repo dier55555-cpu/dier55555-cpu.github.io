@@ -27,7 +27,12 @@ from scraper.case_lookup.search import (
 from scraper.case_lookup.case_number import validate_case_number
 from scraper.court_info import fetch_court_info, normalize_topic, website_to_origin
 from scraper.fetch import Fetcher
-from scraper.proxy_pool import lease_sticky_proxy, proxies_from_env
+from scraper.proxy_pool import (
+    backup_proxies_from_env,
+    lease_sticky_backup_proxy,
+    lease_sticky_proxy,
+    proxies_from_env,
+)
 
 app = FastAPI(title="court-kb delo", version="1.1.0")
 log = logging.getLogger("delo")
@@ -70,6 +75,17 @@ _load_last_good_proxy()
 
 def _ordered_proxies() -> list[str]:
     urls = proxies_from_env()
+    random.shuffle(urls)
+    with _proxy_lock:
+        good = _last_good_proxy
+    if good and good in urls:
+        urls.remove(good)
+        urls.insert(0, good)
+    return urls
+
+
+def _ordered_backup_proxies() -> list[str]:
+    urls = backup_proxies_from_env()
     random.shuffle(urls)
     with _proxy_lock:
         good = _last_good_proxy
@@ -381,31 +397,25 @@ def delo_lookup(payload: CaseLookupRequest, x_api_key: Optional[str] = Header(de
 
 
 def _case_with_channels(domain: str, query: CaseQuery, production_type: str):
-    """Sticky-порты из пула (до 3 попыток), direct только если пул пуст или явно разрешён.
+    """Основной аккаунт (sticky), затем резервный аккаунт; direct только если пул пуст.
 
-    При 6 параллельных /delo — разные исходящие IP (порты 10000–10009).
-    Мёртвый порт (407/503/tunnel) не должен сразу уводить на IP VPS: sudrf
-    с direct часто таймаутит, а соседний sticky того же аккаунта ещё живой.
+    Не распарсилось на обоих — вызывающий джоб оставит на следующий таймер.
     """
     last_result = None
     used = ""
     tried_ports: list[str] = []
-    # Residential CONNECT + sudrf search часто 5–15с; 3×короткий timeout = ложный error.
-    t_budget = time.monotonic() + 70.0
+    t_budget = time.monotonic() + 95.0
     pool = _ordered_proxies()
-    allow_direct = (not pool) or os.environ.get("COURT_KB_ALLOW_DIRECT", "0").strip() in {
-        "1",
-        "true",
-        "yes",
-    }
-    max_proxy_attempts = min(4, len(pool)) if pool else 0
+    backup = _ordered_backup_proxies()
+    allow_direct = (not pool and not backup) or os.environ.get(
+        "COURT_KB_ALLOW_DIRECT", "0"
+    ).strip() in {"1", "true", "yes"}
 
-    def _run(channel: Optional[str]):
+    def _run(channel: Optional[str], tag: str = ""):
         nonlocal last_result, used
         if time.monotonic() >= t_budget:
             return None
         remaining = max(8.0, t_budget - time.monotonic())
-        # connect через pool.proxy.market часто >4с; read на modules.php — до ~20с
         connect_timeout = 10.0
         read_timeout = min(22.0, remaining)
         timeout = (connect_timeout, read_timeout)
@@ -426,7 +436,8 @@ def _case_with_channels(domain: str, query: CaseQuery, production_type: str):
                 max_retries=1,
             )
             used_label = channel
-            tried_ports.append(_proxy_port(channel))
+            label = _proxy_port(channel)
+            tried_ports.append(f"{tag}{label}" if tag else label)
         result = search_case_direct(
             fetcher,
             domain,
@@ -440,46 +451,55 @@ def _case_with_channels(domain: str, query: CaseQuery, production_type: str):
     def _done(result, channel: Optional[str]) -> bool:
         if result is None:
             return False
-        # unavailable = сбой ГАС у всех IP — крутить порты бессмысленно
         if result.status in {"found", "not_found", "unavailable", "blocked"}:
             if result.status == "found" and channel:
                 _save_last_good_proxy(channel)
             return True
         return False
 
-    failed: set[str] = set()
-    # last_good раньше аренды из очереди: очередь FIFO не знает про «удачный» порт
-    with _proxy_lock:
-        good = _last_good_proxy
-    if good and good in pool:
-        result = _run(good)
-        if _done(result, good):
-            return last_result, used
-        failed.add(good)
-
-    for _ in range(max_proxy_attempts):
-        channel: Optional[str] = None
-        try:
-            with lease_sticky_proxy(timeout=12.0) as leased:
-                channel = leased
-                if channel is None or channel in failed:
-                    # пул пуст или повторно выдали уже мёртвый — берём из списка
-                    channel = next((u for u in pool if u not in failed), None)
+    def _try_pool(urls: list[str], lease_fn, tag: str, max_attempts: int) -> bool:
+        if not urls:
+            return False
+        failed: set[str] = set()
+        with _proxy_lock:
+            good = _last_good_proxy
+        if good and good in urls:
+            result = _run(good, tag)
+            if _done(result, good):
+                return True
+            failed.add(good)
+        for _ in range(max_attempts):
+            channel: Optional[str] = None
+            try:
+                with lease_fn(timeout=12.0) as leased:
+                    channel = leased
+                    if channel is None or channel in failed:
+                        channel = next((u for u in urls if u not in failed), None)
+                    if channel is None:
+                        break
+                    result = _run(channel, tag)
+                    if _done(result, channel):
+                        return True
+                    failed.add(channel)
+            except Exception:
+                channel = next((u for u in urls if u not in failed), None)
                 if channel is None:
                     break
-                result = _run(channel)
+                result = _run(channel, tag)
                 if _done(result, channel):
-                    return last_result, used
+                    return True
                 failed.add(channel)
-        except Exception:
-            # очередь занята / таймаут аренды — пробуем без эксклюзивной аренды
-            channel = next((u for u in pool if u not in failed), None)
-            if channel is None:
-                break
-            result = _run(channel)
-            if _done(result, channel):
-                return last_result, used
-            failed.add(channel)
+        return False
+
+    primary_n = min(4, len(pool)) if pool else 0
+    if _try_pool(pool, lease_sticky_proxy, "", primary_n):
+        return last_result, used
+
+    if backup:
+        backup_n = min(3, len(backup))
+        log.info("delo failover backup domain=%s after primary tried=%s", domain, "→".join(tried_ports))
+        if _try_pool(backup, lease_sticky_backup_proxy, "b", backup_n):
+            return last_result, used
 
     if allow_direct:
         _run(None)

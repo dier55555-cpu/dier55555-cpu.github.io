@@ -7,6 +7,8 @@
 COURT_KB_PROXY — один URL или список через запятую/точку с запятой.
 COURT_KB_PROXY_PORTS — «10001-10010» или «10001,10002,10006»: подставляет
 эти порты в host первого URL из COURT_KB_PROXY.
+COURT_KB_PROXY_BACKUP / COURT_KB_PROXY_BACKUP_PORTS — второй аккаунт:
+если основной шлюз не открыл дело, тот же запрос идёт на резерв.
 """
 
 from __future__ import annotations
@@ -85,6 +87,17 @@ def proxies_from_env(
             expanded.extend(expand_ports(url, port_list))
         return expanded
     return urls
+
+
+def backup_proxies_from_env() -> list[str]:
+    """Второй аккаунт прокси (отдельный login). Пусто, если резерва нет."""
+    raw = os.environ.get("COURT_KB_PROXY_BACKUP")
+    if not (raw or "").strip():
+        return []
+    ports = os.environ.get("COURT_KB_PROXY_BACKUP_PORTS") or os.environ.get(
+        "COURT_KB_PROXY_PORTS"
+    )
+    return proxies_from_env(raw, ports)
 
 
 def is_proxy_failure(error: str) -> bool:
@@ -167,7 +180,15 @@ class StickyLeasePool:
 
 
 _LEASE = StickyLeasePool()
+_LEASE_BACKUP = StickyLeasePool()
 
 
 def lease_sticky_proxy(timeout: float = 45.0):
     return _LEASE.lease(timeout=timeout)
+
+
+def lease_sticky_backup_proxy(timeout: float = 45.0):
+    urls = backup_proxies_from_env()
+    if urls and _LEASE_BACKUP.size != len(urls):
+        _LEASE_BACKUP.reset(urls)
+    return _LEASE_BACKUP.lease(timeout=timeout)
