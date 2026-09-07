@@ -40,6 +40,26 @@ saprin-parser.service  (api.delo_app, :8081, sync-handlers в threadpool)
 | `saprin-job-weekly.timer` | Пн **05:00** | до «Вынесено решение» |
 | `saprin-job-daily.timer` | Пн–Пт **07:00** | с «Вынесено решение» и далее |
 
+## Отчёты и откат
+
+После каждого прогона на VPS: `/opt/saprin/logs/runs/weekly/` и `.../daily/` (хранятся **последние 7**).
+
+```bash
+ls -lt /opt/saprin/logs/runs/daily/
+# 20260908-0700.md  +  -moves.jsonl  +  -errors.jsonl
+```
+
+Откат **только переносов из выбранного отчёта**, если этап в CRM всё ещё «стало»:
+
+```bash
+# сначала посмотреть
+/opt/saprin/venv/bin/python /opt/saprin/job/rollback_run.py --job daily --stamp 20260908-0700
+# применить
+/opt/saprin/venv/bin/python /opt/saprin/job/rollback_run.py --job daily --stamp 20260908-0700 --apply
+```
+
+Сделки, которые юрист уже сдвинул дальше, скрипт **пропустит**.
+
 ## Деплой
 
 ```bash

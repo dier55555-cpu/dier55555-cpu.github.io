@@ -10,6 +10,7 @@ Group=saprin
 WorkingDirectory=/opt/saprin/job
 EnvironmentFile=/opt/saprin/job/.env
 Environment=TZ=Europe/Moscow
+Environment=SAPRIN_JOB_KIND=weekly
 Environment=PARSE_CONCURRENCY=6
 Environment=PARSE_HOST_PAUSE_SEC=0.8
 # этапы до «Вынесено решение»

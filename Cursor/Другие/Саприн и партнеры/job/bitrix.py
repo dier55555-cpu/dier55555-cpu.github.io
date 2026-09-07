@@ -35,6 +35,7 @@ from triggers import (
     set_stage_ddu,
 )
 from calendar_alerts import post_stage_alert, probe_calendar
+from run_report import RunRecorder, detect_job_kind, write_run_bundle
 from triggers import StageAlert
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
@@ -492,6 +493,8 @@ def run_daily_job() -> dict[str, int]:
         logger.warning("BITRIX_WEBHOOK_URL не задан — прогон пропущен")
         return stats
 
+    recorder = RunRecorder(detect_job_kind())
+
     ddu = resolve_stage_ddu()
     logger.info("STAGE_DDU=%s", ddu or "NOT FOUND")
     try:
@@ -542,6 +545,14 @@ def run_daily_job() -> dict[str, int]:
         if parse_exc or not parsed:
             logger.error("Parser failed for deal %s: %s", deal.id, parse_exc or "empty")
             stats["errors"] += 1
+            recorder.add_error(
+                deal_id=deal.id,
+                case_number=deal.case_number,
+                stage_id=deal.stage_id,
+                status="crash",
+                message=str(parse_exc or "empty"),
+                court_website=deal.court_website or "",
+            )
             continue
 
         status = parsed.get("status")
@@ -589,6 +600,14 @@ def run_daily_job() -> dict[str, int]:
                     f"Причина: {status} — {parsed.get('result')}"
                 )
                 logger.warning("Deal %s: %s", deal.id, note.replace("\n", " | "))
+                recorder.add_error(
+                    deal_id=deal.id,
+                    case_number=deal.case_number,
+                    stage_id=deal.stage_id,
+                    status=str(status),
+                    message=str(parsed.get("result") or ""),
+                    court_website=deal.court_website or "",
+                )
                 if not DRY_RUN:
                     push_fields(deal.id, {
                         UF_LAST_STATUS: f"{status}: {str(parsed.get('result'))[:200]}",
@@ -613,12 +632,26 @@ def run_daily_job() -> dict[str, int]:
         if trig.get("alerts"):
             emit_alerts(deal, trig["alerts"])
             stats["alerts"] += len(trig["alerts"])
+            for al in trig["alerts"]:
+                recorder.add_alert(deal.id, deal.case_number, getattr(al, "kind", "?"), getattr(al, "detail", ""))
 
         if DRY_RUN:
             logger.info(
                 "DRY_RUN deal %s %s changed=%s trigger=%s to=%s",
                 deal.id, deal.case_number, changed, trig["action"], trig.get("to_stage"),
             )
+            if trig["action"] == "move" and trig.get("to_stage") and can_auto_move(deal.stage_id, trig["to_stage"]):
+                recorder.add_move(
+                    deal_id=deal.id,
+                    case_number=deal.case_number,
+                    from_stage=deal.stage_id,
+                    to_stage=trig["to_stage"],
+                    reason=str(trig.get("reason") or ""),
+                    applied=False,
+                    prev_known=deal.last_known_stage,
+                    prev_enter=deal.stage_enter,
+                    comment=str(trig.get("comment") or ""),
+                )
         else:
             fields = {
                 UF_LAST_STATUS: status_text[:250],
@@ -638,6 +671,17 @@ def run_daily_job() -> dict[str, int]:
                     fields[UF_LAST_KNOWN_STAGE] = to_stage
                     fields[UF_STAGE_ENTER] = today_iso
                     stats["moved"] += 1
+                    recorder.add_move(
+                        deal_id=deal.id,
+                        case_number=deal.case_number,
+                        from_stage=deal.stage_id,
+                        to_stage=to_stage,
+                        reason=str(trig.get("reason") or ""),
+                        applied=True,
+                        prev_known=deal.last_known_stage,
+                        prev_enter=deal.stage_enter,
+                        comment=str(trig.get("comment") or ""),
+                    )
                     comment = (
                         f"[Саприн] Автопереход этапа\n"
                         f"{deal.stage_id} → {to_stage}\n"
@@ -660,6 +704,16 @@ def run_daily_job() -> dict[str, int]:
 
     save_local_hashes(hashes)
     logger.info("Job done: %s", stats)
+    try:
+        paths = write_run_bundle(
+            recorder,
+            stats,
+            webhook_url=BITRIX_WEBHOOK_URL,
+            dry_run=DRY_RUN,
+        )
+        logger.info("Run report: %s", paths)
+    except Exception as exc:  # noqa: BLE001
+        logger.error("Run report failed: %s", exc)
     return stats
 
 
