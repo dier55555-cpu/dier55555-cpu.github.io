@@ -1,13 +1,23 @@
 ---
-description: Кабинет Neyroagents. Свой MCP, не ДендрИИт.
+description: Кабинет Neyroagents. Свой ключ, не ДендрИИт.
 alwaysApply: true
 ---
 
 # Кабинет Нои: Neyroagents
 
-Секрет Cursor: `NOYA_KEY_NEYROAGENTS`  
-MCP-папка: `noya-ai-mcp/` (локально под этим кабинетом)
+Секрет Cursor: `NOYA_KEY_NEYROAGENTS` (`nk_live_…`)  
+API: `https://noya-ai.ru`  
+MCP: `noya-ai-mcp/` + `.cursor/mcp.json.example` (пакет с `/api/mcp-info`)
 
-**Не использовать** ключ и `noya-ai-mcp` кабинета ДендрИИт.  
-Перед работой: включить MCP `noya-neyroagents`, выключить `noya` (ДендрИИт), затем `whoami`.  
-Ключи в git не писать.
+**Не использовать** ключ и MCP кабинета `NOY/dendriit/` (Анна / Легион).
+
+Перед работой: `GET /api/key/info` / MCP `whoami` — `account_name` = Neyroagents.  
+Клиентские доски — отдельные воркфлоу: `GET /api/workflows`, затем `X-Workflow-Id`.
+
+## Проекты
+
+| Папка | Воркфлоу на Ное |
+|-------|-----------------|
+| `ДендрИИт/` | Студия ДендрИИт - АГЕНТ |
+
+Ключи в git и в этот файл не писать.

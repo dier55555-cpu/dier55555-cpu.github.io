@@ -4,7 +4,7 @@
 Projects/          Cursor/
   NOY/               NOY/
     dendriit/          dendriit/       # кабинет: anna, легион
-    Neyroagents/       Neyroagents/    # кабинет: ~11 воркфлоу
+    Neyroagents/       Neyroagents/    # кабинет: воркфлоу, в т.ч. ДендрИИт
   Другие/            Другие/
     bitrix-yurist/     bitrix-yurist/  # не Ноя
     Саприн и партнеры/ Саприн и партнеры/

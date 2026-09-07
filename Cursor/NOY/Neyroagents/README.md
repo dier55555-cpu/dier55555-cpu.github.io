@@ -1,22 +1,21 @@
-# Подключение MCP: кабинет Neyroagents
+# Кабинет: Neyroagents
 
-Отдельный MCP от ДендрИИт. Ключ ДендрИИт сюда **не** копировать.
+Локально: `/Users/user/Projects/NOY/Neyroagents/`  
+В репо: `Cursor/NOY/Neyroagents/`
 
-## На Mac
+Отдельный аккаунт Нои (~11 воркфлоу). Ключ кабинета `NOY/dendriit/` сюда **не** копировать.
 
-```text
-/Users/user/Projects/NOY/Neyroagents/noya-ai-mcp/   ← MCP этого кабинета
-```
+| Поле | Значение |
+|------|----------|
+| Секрет | `NOYA_KEY_NEYROAGENTS` |
+| API | `https://noya-ai.ru` (`Authorization: Bearer nk_live_…`) |
+| Пространства | `GET /api/workflows` + заголовок `X-Workflow-Id` |
 
-В `~/.cursor/mcp.json` второй сервер, например `noya-neyroagents`, с `envFile` на эту папку.
+## Содержимое
 
-## Правило
+| Папка | Что |
+|-------|-----|
+| [ДендрИИт/](./ДендрИИт/) | воркфлоу **Студия ДендрИИт - АГЕНТ** |
+| `noya-ai-mcp/` | MCP этого кабинета (пакет с `/api/mcp-info`; ключ не в git) |
 
-| Работаешь с | Включи MCP | Выключи |
-|-------------|------------|---------|
-| ДендрИИт (`anna`, `легион`) | `noya` | `noya-neyroagents` |
-| Neyroagents | `noya-neyroagents` | `noya` |
-
-Оба сразу — риск перепутать кабинет (`whoami`).
-
-Секрет: только локальный файл / Cursor Secrets `NOYA_KEY_NEYROAGENTS`. Не в git.
+Открывать в Cursor папку кабинета `Neyroagents/`. Сначала `whoami`. Чужой воркфлоу без `X-Workflow-Id` не править.

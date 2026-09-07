@@ -7,7 +7,7 @@
 | `_shared/` | методология, ключи, инструкция |
 | `_cabinet-template/` | шаблон нового кабинета |
 | `dendriit/` | кабинет: проекты `anna/`, `легион/` |
-| `Neyroagents/` | кабинет: ~11 воркфлоу (MCP-ключи позже) |
+| `Neyroagents/` | кабинет: ~11 воркфлоу; проект `ДендрИИт/` |
 
 Не класть сюда `bitrix-yurist` — он в `../Другие/`.  
 Гайд: [_shared/cabinets-and-keys.md](./_shared/cabinets-and-keys.md).
