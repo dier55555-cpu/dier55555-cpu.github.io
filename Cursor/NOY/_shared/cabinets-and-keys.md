@@ -18,8 +18,9 @@
 │   │   ├── noya-ai-mcp/              noya-ai-mcp/       ← MCP-подключение ДендрИИт
 │   │   ├── anna/                     anna/              ← проект
 │   │   └── легион/                   легион/            ← проект
-│   └── Neyroagents/                  Neyroagents/       ← кабинет (~11 воркфлоу; свой MCP позже)
-│       └── <проекты…>
+│   └── Neyroagents/                  Neyroagents/       ← кабинет (~11 воркфлоу)
+│       ├── noya-ai-mcp/              noya-ai-mcp/
+│       └── ДендрИИт/                 ДендрИИт/          ← воркфлоу «Студия ДендрИИт - АГЕНТ»
 └── Другие/                           Другие/
     ├── bitrix-yurist/                bitrix-yurist/     ← НЕ Ноя (сервер отдельно)
     └── Саприн и партнеры/            Саприн и партнеры/ ← НЕ Ноя
@@ -41,7 +42,7 @@
 | Кабинет | Секрет | Статус |
 |---------|--------|--------|
 | `NOY/dendriit/` | `NOYA_KEY_DENDRIIT` | MCP-папка: `noya-ai-mcp/` |
-| `NOY/Neyroagents/` | `NOYA_KEY_NEYROAGENTS` | свой MCP позже; не брать ДендрИИт |
+| `NOY/Neyroagents/` | `NOYA_KEY_NEYROAGENTS` | MCP: `noya-ai-mcp/`; не брать ключ ДендрИИт |
 | `Другие/*` | — | не Ноя |
 
 MCP: `<cabinet>/.cursor/mcp.json` с `${env:NOYA_KEY_…}`.  
@@ -57,7 +58,7 @@ MCP: `<cabinet>/.cursor/mcp.json` с `${env:NOYA_KEY_…}`.
 |--------|-------|--------|
 | Анна | `NOY/dendriit/` + `anna/` | `NOYA_KEY_DENDRIIT` |
 | Легион | `NOY/dendriit/` + `легион/` | `NOYA_KEY_DENDRIIT` (тот же кабинет) |
-| Воркфлоу Neyroagents | `NOY/Neyroagents/` | `NOYA_KEY_NEYROAGENTS` (позже) |
+| Воркфлоу Neyroagents (Студия ДендрИИт - АГЕНТ) | `NOY/Neyroagents/` + `ДендрИИт/` | `NOYA_KEY_NEYROAGENTS` |
 | Битрикс-Юрист | `Другие/bitrix-yurist/` | без ключа Нои |
 | Саприн и партнеры | `Другие/Саприн и партнеры/` | без ключа Нои |
 
@@ -79,3 +80,16 @@ MCP: `<cabinet>/.cursor/mcp.json` с `${env:NOYA_KEY_…}`.
 | Проекты | `anna/`, `легион/` |
 | Агент (править по умолчанию) | Анна `d0b7f22e-b80a-403f-864a-cdf12c2dbebb` |
 | Агент (не трогать без команды) | Легион `b7bf93fd-41dc-4fb3-9c48-de6de9ea84f3` |
+
+Клиентский продажный агент студии в продакшене живёт **не здесь**, а в кабинете Neyroagents, воркфлоу «Студия ДендрИИт - АГЕНТ» (`NOY/Neyroagents/ДендрИИт/`).
+
+## Кабинет Neyroagents
+
+| Поле | Значение |
+|------|----------|
+| Путь | `/Users/user/Projects/NOY/Neyroagents/` |
+| Секрет | `NOYA_KEY_NEYROAGENTS` |
+| API | `https://noya-ai.ru` |
+| Проекты | `ДендрИИт/` (воркфлоу «Студия ДендрИИт - АГЕНТ») |
+
+Несколько воркфлоу в одном аккаунте: `GET /api/workflows`, заголовок `X-Workflow-Id`. Без заголовка API отдаёт основное пространство. Ключ `NOYA_KEY_DENDRIIT` сюда не подставлять.

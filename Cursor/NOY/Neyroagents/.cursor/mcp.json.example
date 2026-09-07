@@ -1,10 +1,11 @@
 {
-  "_comment": "Заполнить после получения ключей. Секрет: NOYA_KEY_NEYROAGENTS. Не коммитить mcp.json с секретом.",
+  "_comment": "Скопировать в mcp.json (он в gitignore). Ключ только в Secrets: NOYA_KEY_NEYROAGENTS. Не брать ключ ДендрИИт. Актуальный package_url: GET https://noya-ai.ru/api/mcp-info",
   "mcpServers": {
-    "noya": {
-      "url": "PASTE_NEYROAGENTS_NOYA_MCP_URL",
-      "headers": {
-        "Authorization": "Bearer ${env:NOYA_KEY_NEYROAGENTS}"
+    "noya-neyroagents": {
+      "command": "npx",
+      "args": ["-y", "https://noya-ai.ru/mcp/0.10.3/noya-mcp.tgz"],
+      "env": {
+        "NOYA_API_KEY": "${env:NOYA_KEY_NEYROAGENTS}"
       }
     }
   }

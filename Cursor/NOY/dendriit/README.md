@@ -20,4 +20,4 @@
 Открывать в Cursor папку кабинета `dendriit/`.  
 Ключ MCP ДендрИИт — в `noya-ai-mcp/.env` / Cursor Secrets (`NOYA_KEY_DENDRIIT`), не в git.  
 `bitrix-yurist` сюда **не** входит → `../../Другие/bitrix-yurist/`.  
-Кабинет Neyroagents получит **свой** MCP позже — этот `noya-ai-mcp` туда не копировать.
+Кабинет Neyroagents — свой MCP (`NOYA_KEY_NEYROAGENTS`), этот `noya-ai-mcp` туда не копировать. Продакшен-агент студии: `NOY/Neyroagents/ДендрИИт/`.
