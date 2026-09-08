@@ -13,7 +13,8 @@
 │   │   ├── noya-ai-mcp/       MCP ДендрИИт
 │   │   ├── anna/              проект
 │   │   └── легион/            проект
-│   └── Neyroagents/           кабинет (~11 воркфлоу; свой MCP позже)
+│   └── Neyroagents/           кабинет Нейроагентс
+│       └── ДендрИИт/          агент студии
 └── Другие/                    вне Нои
     ├── bitrix-yurist/         серверный проект, не Ноя
     └── Саприн и партнеры/     проект вне Нои
@@ -27,7 +28,7 @@
 4. Кабинет ≠ проект. В кабинете проектов несколько (`anna` и `легион` оба в `dendriit`).
 5. Ключ MCP — на **кабинет** Нои. `Другие/` ключей Нои не требует.
 6. Перед работой на Ное: `NOY/_shared/` + `whoami` ↔ `<cabinet>/.cursor/rules/noya-cabinets.mdc`.
-7. Neyroagents: не выдумывать ключи; ждать `NOYA_KEY_NEYROAGENTS` от Александра.
+7. Neyroagents: ключ `NOYA_KEY_NEYROAGENTS`; агент студии в `Neyroagents/ДендрИИт/`, не `dendriit/легион/`.
 8. Подробно: `Cursor/NOY/_shared/cabinets-and-keys.md`.
 
 ## Известное
@@ -37,6 +38,7 @@
 | `NOY/dendriit/` | кабинет Нои | `NOYA_KEY_DENDRIIT` |
 | `NOY/dendriit/anna/` | проект | ↑ |
 | `NOY/dendriit/легион/` | проект | ↑ |
-| `NOY/Neyroagents/` | кабинет Нои | `NOYA_KEY_NEYROAGENTS` (позже) |
+| `NOY/Neyroagents/` | кабинет Нои | `NOYA_KEY_NEYROAGENTS` |
+| `NOY/Neyroagents/ДендрИИт/` | агент «Студия ДендрИИт - АГЕНТ» | ↑ |
 | `Другие/bitrix-yurist/` | вне Нои | — |
 | `Другие/Саприн и партнеры/` | вне Нои | — |

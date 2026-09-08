@@ -1,22 +1,12 @@
-# Подключение MCP: кабинет Neyroagents
+# Кабинет: Нейроагентс
 
-Отдельный MCP от ДендрИИт. Ключ ДендрИИт сюда **не** копировать.
+Id: `4e2e1b84-87ee-4031-a8f1-2ea3cf9c6074`  
+Доска: Основной `e6f90863-8905-4607-be18-d76907531b6c`  
+Секрет: `NOYA_KEY_NEYROAGENTS` (значение в Secrets, не в git).  
+API: `https://noya-ai.ru`
 
-## На Mac
+Ключ кабинета `NOY/dendriit/` сюда не подставлять.
 
-```text
-/Users/user/Projects/NOY/Neyroagents/noya-ai-mcp/   ← MCP этого кабинета
-```
-
-В `~/.cursor/mcp.json` второй сервер, например `noya-neyroagents`, с `envFile` на эту папку.
-
-## Правило
-
-| Работаешь с | Включи MCP | Выключи |
-|-------------|------------|---------|
-| ДендрИИт (`anna`, `легион`) | `noya` | `noya-neyroagents` |
-| Neyroagents | `noya-neyroagents` | `noya` |
-
-Оба сразу — риск перепутать кабинет (`whoami`).
-
-Секрет: только локальный файл / Cursor Secrets `NOYA_KEY_NEYROAGENTS`. Не в git.
+| Папка | Что |
+|-------|-----|
+| [ДендрИИт/](./ДендрИИт/) | агент **Студия ДендрИИт - АГЕНТ** |
