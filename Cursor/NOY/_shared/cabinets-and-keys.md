@@ -18,8 +18,8 @@
 │   │   ├── noya-ai-mcp/              noya-ai-mcp/       ← MCP-подключение ДендрИИт
 │   │   ├── anna/                     anna/              ← проект
 │   │   └── легион/                   легион/            ← проект
-│   └── Neyroagents/                  Neyroagents/       ← кабинет (~11 воркфлоу; свой MCP позже)
-│       └── <проекты…>
+│   └── Neyroagents/                  Neyroagents/       ← кабинет Нейроагентс
+│       └── ДендрИИт/                 ДендрИИт/          ← агент «Студия ДендрИИт - АГЕНТ»
 └── Другие/                           Другие/
     ├── bitrix-yurist/                bitrix-yurist/     ← НЕ Ноя (сервер отдельно)
     └── Саприн и партнеры/            Саприн и партнеры/ ← НЕ Ноя
@@ -41,7 +41,7 @@
 | Кабинет | Секрет | Статус |
 |---------|--------|--------|
 | `NOY/dendriit/` | `NOYA_KEY_DENDRIIT` | MCP-папка: `noya-ai-mcp/` |
-| `NOY/Neyroagents/` | `NOYA_KEY_NEYROAGENTS` | свой MCP позже; не брать ДендрИИт |
+| `NOY/Neyroagents/` | `NOYA_KEY_NEYROAGENTS` | кабинет `4e2e1b84-87ee-4031-a8f1-2ea3cf9c6074`; не брать ключ dendriit |
 | `Другие/*` | — | не Ноя |
 
 MCP: `<cabinet>/.cursor/mcp.json` с `${env:NOYA_KEY_…}`.  
@@ -57,7 +57,7 @@ MCP: `<cabinet>/.cursor/mcp.json` с `${env:NOYA_KEY_…}`.
 |--------|-------|--------|
 | Анна | `NOY/dendriit/` + `anna/` | `NOYA_KEY_DENDRIIT` |
 | Легион | `NOY/dendriit/` + `легион/` | `NOYA_KEY_DENDRIIT` (тот же кабинет) |
-| Воркфлоу Neyroagents | `NOY/Neyroagents/` | `NOYA_KEY_NEYROAGENTS` (позже) |
+| Воркфлоу / агент студии | `NOY/Neyroagents/` + `ДендрИИт/` | `NOYA_KEY_NEYROAGENTS` |
 | Битрикс-Юрист | `Другие/bitrix-yurist/` | без ключа Нои |
 | Саприн и партнеры | `Другие/Саприн и партнеры/` | без ключа Нои |
 
@@ -79,3 +79,16 @@ MCP: `<cabinet>/.cursor/mcp.json` с `${env:NOYA_KEY_…}`.
 | Проекты | `anna/`, `легион/` |
 | Агент (править по умолчанию) | Анна `d0b7f22e-b80a-403f-864a-cdf12c2dbebb` |
 | Агент (не трогать без команды) | Легион `b7bf93fd-41dc-4fb3-9c48-de6de9ea84f3` |
+
+Продакшен-агент студии — в кабинете Нейроагентс, не здесь.
+
+## Кабинет Нейроагентс
+
+| Поле | Значение |
+|------|----------|
+| Путь | `/Users/user/Projects/NOY/Neyroagents/` |
+| Id | `4e2e1b84-87ee-4031-a8f1-2ea3cf9c6074` |
+| Доска | Основной `e6f90863-8905-4607-be18-d76907531b6c` |
+| Секрет | `NOYA_KEY_NEYROAGENTS` |
+| Проект | `ДендрИИт/` — агент Студия ДендрИИт - АГЕНТ `067a3fa8-8020-43fe-ae59-fbbab384a2a1` |
+
