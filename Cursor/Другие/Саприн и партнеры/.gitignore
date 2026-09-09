@@ -1,5 +1,8 @@
 .env
 .env.proxy
+_архив/secrets/
+**/id_rsa
+**/id_rsa.pub
 *.pyc
 __pycache__/
 .venv/

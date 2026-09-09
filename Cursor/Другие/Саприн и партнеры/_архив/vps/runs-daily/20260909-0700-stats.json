@@ -1,0 +1,21 @@
+{
+  "kind": "daily",
+  "stamp": "20260909-0700",
+  "started": "2026-09-09T07:00:12+03:00",
+  "finished": "2026-09-09T07:14:39+03:00",
+  "dry_run": false,
+  "stats": {
+    "total": 197,
+    "changed": 7,
+    "unchanged": 185,
+    "errors": 0,
+    "skipped": 5,
+    "manual": 0,
+    "moved": 3,
+    "trigger_stop": 0,
+    "alerts": 4
+  },
+  "moves": 3,
+  "applied_moves": 3,
+  "errors": 0
+}
