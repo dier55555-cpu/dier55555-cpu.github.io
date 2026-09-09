@@ -42,6 +42,42 @@ saprin-parser.service  (api.delo_app, :8081, sync-handlers в threadpool)
 | `saprin-job-weekly.timer` | Пн **05:00** | до «Вынесено решение» |
 | `saprin-job-daily.timer` | Пн–Пт **07:00** | с «Вынесено решение» и далее |
 
+## Уведомления клиенту (MAX и Telegram)
+
+При **автопереходе** этапа (по умолчанию только «Вынесено решение», `C2:UC_GZ6RL3`) джоб берёт телефон из контакта сделки (если нет — из названия) и шлёт текст в MAX и Telegram **по номеру**.
+
+Шаблон для «Вынесено решение»:
+
+```
+Сообщаем вам, что по вашему делу {номер} судом вынесено решение. Для ознакомления можете перейти по ссылке:
+{ссылка на sudrf}
+
+Также можете позвонить юристу, ведущему ваше дело: {телефон ответственного}.
+```
+
+Официальные боты MAX/Telegram **не умеют** писать «на любой номер» без диалога. Поэтому транспорт — **Green-API**: два инстанса (мессенджер MAX и Telegram), в кабинете сканируется QR **рабочими** аккаунтами фирмы.
+
+```bash
+# в /opt/saprin/job/.env
+CLIENT_NOTIFY=1
+CLIENT_NOTIFY_STAGES=C2:UC_GZ6RL3
+CLIENT_NOTIFY_CHANNELS=max,telegram
+GREEN_API_MAX_URL=https://api.green-api.com
+GREEN_API_MAX_ID=...
+GREEN_API_MAX_TOKEN=...
+GREEN_API_TG_URL=https://api.green-api.com
+GREEN_API_TG_ID=...
+GREEN_API_TG_TOKEN=...
+```
+
+Другие этапы: допишите ID через запятую в `CLIENT_NOTIFY_STAGES`. Повтор на ту же сделку+этап не шлётся (`job/data/client_notify.json`). `DRY_RUN=1` — только лог, без отправки.
+
+Проверка шаблона и телефонов без рассылки:
+
+```bash
+/opt/saprin/venv/bin/python /opt/saprin/job/probe_notify.py
+```
+
 ## Отчёты и откат
 
 После каждого прогона на VPS: `/opt/saprin/logs/runs/weekly/` и `.../daily/` (хранятся **последние 7**).

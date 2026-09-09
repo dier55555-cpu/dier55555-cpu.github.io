@@ -9,5 +9,7 @@ __pycache__/
 venv/
 data/snapshots.json
 data/retry_queue.json
+data/client_notify.json
+data/stage_alerts.json
 .last_good_proxy
 .DS_Store

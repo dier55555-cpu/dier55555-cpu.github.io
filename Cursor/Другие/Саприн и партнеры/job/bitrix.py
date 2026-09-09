@@ -35,6 +35,7 @@ from triggers import (
     set_stage_ddu,
 )
 from calendar_alerts import post_stage_alert, probe_calendar
+from client_notify import NotifyResult, extract_case_page_url, mask_phone, notify_stage_move
 from run_report import RunRecorder, detect_job_kind, write_run_bundle
 from triggers import StageAlert
 
@@ -122,6 +123,8 @@ class Deal:
     deadline_40d: Optional[str] = None
     stage_enter: Optional[str] = None
     appeal_result: Optional[str] = None
+    contact_id: Optional[int] = None
+    assigned_by_id: Optional[int] = None
     raw: dict = field(default_factory=dict)
 
 
@@ -198,7 +201,7 @@ def pull_deals() -> list[Deal]:
     if WORKING_STAGE_IDS:
         filter_["@STAGE_ID"] = WORKING_STAGE_IDS
     select = [
-        "ID", "TITLE", "STAGE_ID",
+        "ID", "TITLE", "STAGE_ID", "CONTACT_ID", "ASSIGNED_BY_ID",
         UF_CASE_NUMBER, UF_SNAPSHOT_HASH, UF_LAST_KNOWN_STAGE, UF_COURT_WEBSITE,
         UF_LAST_STATUS, UF_LAST_CHECK_AT,
         UF_DECISION_DATE, UF_DECISION_PUBLISHED, UF_DEADLINE_40D, UF_STAGE_ENTER, UF_APPEAL_RESULT,
@@ -223,6 +226,13 @@ def pull_deals() -> list[Deal]:
                 v = item.get(name)
                 return str(v).strip() if v not in (None, "", False, [], {}) else None
 
+            def _id(name: str) -> Optional[int]:
+                try:
+                    n = int(item.get(name) or 0)
+                except (TypeError, ValueError):
+                    return None
+                return n or None
+
             deals.append(Deal(
                 id=int(item["ID"]),
                 title=item.get("TITLE") or "",
@@ -237,6 +247,8 @@ def pull_deals() -> list[Deal]:
                 deadline_40d=_uf(UF_DEADLINE_40D),
                 stage_enter=_uf(UF_STAGE_ENTER),
                 appeal_result=_uf(UF_APPEAL_RESULT),
+                contact_id=_id("CONTACT_ID"),
+                assigned_by_id=_id("ASSIGNED_BY_ID"),
                 raw=item,
             ))
             if LIMIT_DEALS and len(deals) >= LIMIT_DEALS:
@@ -484,10 +496,55 @@ def detect_manual_stage_move(deal: Deal) -> Optional[tuple[str, StageAlert]]:
     return note, alert
 
 
+def _tally_notify(stats: dict[str, int], recorder: RunRecorder, deal: Deal, nres: NotifyResult) -> None:
+    if nres.skipped in {"disabled", "stage_not_in_list"}:
+        return
+    recorder.add_notify(
+        deal_id=deal.id,
+        case_number=deal.case_number,
+        phone=mask_phone(nres.phone) if nres.phone else "",
+        sent=nres.sent,
+        skipped=nres.skipped,
+        channels=[c.channel for c in nres.channels if c.ok] or [c.channel for c in nres.channels],
+        detail=nres.skipped or ",".join(
+            f"{c.channel}:{'ok' if c.ok else c.detail}" for c in nres.channels
+        ),
+    )
+    if nres.sent:
+        stats["notify_sent"] += 1
+    elif nres.skipped:
+        stats["notify_skip"] += 1
+    else:
+        stats["notify_fail"] += 1
+
+
+def emit_client_notify(deal: Deal, to_stage: str, parsed: Optional[dict[str, Any]], dry_run: bool) -> NotifyResult:
+    case_url = extract_case_page_url(deal.raw, UF_COURT_URLS, parsed)
+    if not case_url and deal.court_website:
+        case_url = deal.court_website
+    try:
+        return notify_stage_move(
+            call=_call,
+            deal_id=deal.id,
+            title=deal.title,
+            case_number=deal.case_number,
+            to_stage=to_stage,
+            contact_id=deal.contact_id,
+            assigned_by_id=deal.assigned_by_id,
+            case_url=case_url,
+            dry_run=dry_run,
+            comment_timeline=None if dry_run else comment_timeline,
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.error("client notify failed deal=%s: %s", deal.id, exc)
+        return NotifyResult(False, skipped=f"error:{exc}")
+
+
 def run_daily_job() -> dict[str, int]:
     stats = {
         "total": 0, "changed": 0, "unchanged": 0, "errors": 0, "skipped": 0,
         "manual": 0, "moved": 0, "trigger_stop": 0, "alerts": 0,
+        "notify_sent": 0, "notify_skip": 0, "notify_fail": 0,
     }
     if not BITRIX_WEBHOOK_URL or "YOUR_PORTAL" in BITRIX_WEBHOOK_URL:
         logger.warning("BITRIX_WEBHOOK_URL не задан — прогон пропущен")
@@ -652,6 +709,8 @@ def run_daily_job() -> dict[str, int]:
                     prev_enter=deal.stage_enter,
                     comment=str(trig.get("comment") or ""),
                 )
+                nres = emit_client_notify(deal, trig["to_stage"], parsed, dry_run=True)
+                _tally_notify(stats, recorder, deal, nres)
         else:
             fields = {
                 UF_LAST_STATUS: status_text[:250],
@@ -682,6 +741,8 @@ def run_daily_job() -> dict[str, int]:
                         prev_enter=deal.stage_enter,
                         comment=str(trig.get("comment") or ""),
                     )
+                    nres = emit_client_notify(deal, to_stage, parsed, dry_run=False)
+                    _tally_notify(stats, recorder, deal, nres)
                     comment = (
                         f"[Саприн] Автопереход этапа\n"
                         f"{deal.stage_id} → {to_stage}\n"

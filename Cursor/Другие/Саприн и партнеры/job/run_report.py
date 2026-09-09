@@ -59,6 +59,7 @@ class RunRecorder:
         self.moves: list[dict[str, Any]] = []
         self.errors: list[dict[str, Any]] = []
         self.alerts: list[dict[str, Any]] = []
+        self.notifies: list[dict[str, Any]] = []
 
     def add_move(
         self,
@@ -118,6 +119,28 @@ class RunRecorder:
         })
 
 
+    def add_notify(
+        self,
+        *,
+        deal_id: int,
+        case_number: Optional[str],
+        phone: str,
+        sent: bool,
+        skipped: str = "",
+        channels: Optional[list[str]] = None,
+        detail: str = "",
+    ) -> None:
+        self.notifies.append({
+            "deal_id": deal_id,
+            "case_number": case_number or "",
+            "phone": phone or "",
+            "sent": bool(sent),
+            "skipped": skipped or "",
+            "channels": channels or [],
+            "detail": (detail or "")[:400],
+        })
+
+
 def _write_jsonl(path: Path, rows: list[dict[str, Any]]) -> None:
     with path.open("w", encoding="utf-8") as fh:
         for row in rows:
@@ -133,6 +156,7 @@ def render_markdown(
     moves: list[dict[str, Any]],
     errors: list[dict[str, Any]],
     alerts: list[dict[str, Any]],
+    notifies: Optional[list[dict[str, Any]]] = None,
     webhook_url: str = "",
     dry_run: bool = False,
 ) -> str:
@@ -154,6 +178,7 @@ def render_markdown(
         f"| Пропуск | {stats.get('skipped', 0)} |",
         f"| Алерты | {stats.get('alerts', len(alerts))} |",
         f"| Стоп юристу | {stats.get('trigger_stop', 0)} |",
+        f"| Уведомлений клиенту | {stats.get('notify_sent', 0)} |",
         "",
         "Откат: только строки из `*-moves.jsonl` с `applied=true`, если этап в CRM всё ещё «стало».",
         "",
@@ -187,6 +212,14 @@ def render_markdown(
         lines += ["## Алерты календаря", "", "| Сделка | Дело | Тип |", "|---|---|---|"]
         for a in alerts:
             lines.append(f"| {a['deal_id']} | {a.get('case_number') or '—'} | {a.get('kind')} |")
+        lines.append("")
+    if notifies:
+        lines += ["## Уведомления клиентам (MAX/TG)", "", "| Сделка | Дело | Телефон | Статус |", "|---|---|---|---|"]
+        for n in notifies:
+            st = "отправлено" if n.get("sent") else (n.get("skipped") or n.get("detail") or "fail")
+            lines.append(
+                f"| {n['deal_id']} | {n.get('case_number') or '—'} | {n.get('phone') or '—'} | {st} |"
+            )
         lines.append("")
     lines.append("Ошибки парсера **не откатываются** — CRM этап не меняли.")
     return "\n".join(lines) + "\n"
@@ -232,6 +265,7 @@ def write_run_bundle(
             moves=recorder.moves,
             errors=recorder.errors,
             alerts=recorder.alerts,
+            notifies=recorder.notifies,
             webhook_url=webhook_url,
             dry_run=dry_run,
         ),
