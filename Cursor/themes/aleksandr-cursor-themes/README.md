@@ -1,61 +1,89 @@
 # Aleksandr Cursor Themes
 
-Три кастомные темы вместо стандартных:
+Три темы в **стандартном** списке Cursor: **Aleksandr Dark**, **Aleksandr Light**, **Aleksandr Night Gold**.
 
-| Тема | Стиль |
-|------|--------|
-| **Aleksandr Dark** | угольный фон, синий акцент |
-| **Aleksandr Light** | светло-серый, спокойный синий |
-| **Aleksandr Night Gold** | чёрный + золото `#d4af37` (как на privacy-странице) |
+Они появятся в `Preferences: Color Theme` только после установки как расширения (один раз).
 
-## Установка в Cursor (Mac)
+---
 
-1. Открой **IDE** (не Agents Window): `Cmd+Shift+P` → **Open IDE**.
-2. `Cmd+Shift+P` → **Developer: Install Extension from Location**.
-3. Выбери папку:
+## Способ 1 — скрипт (Mac, из зеркала Projects)
+
+В терминале:
+
+```bash
+cd /Users/user/Projects/themes/aleksandr-cursor-themes
+chmod +x install.sh
+./install.sh
+```
+
+Потом в Cursor:
+
+1. `Cmd+Shift+P` → **Developer: Reload Window**
+2. `Cmd+Shift+P` → **Preferences: Color Theme**
+3. Выбери **Aleksandr Dark** / **Light** / **Night Gold**
+
+Скрипт копирует расширение в `~/.cursor/extensions/aleksandr.aleksandr-cursor-themes-1.0.0/`.
+
+---
+
+## Способ 2 — из Cursor (без терминала)
+
+1. `Cmd+Shift+P` → **Open IDE** (если ты в Agents Window)
+2. `Cmd+Shift+P` → **Developer: Install Extension from Location**
+3. Укажи папку:
 
 ```text
 /Users/user/Projects/themes/aleksandr-cursor-themes
 ```
 
-(в этом репо путь: `Cursor/themes/aleksandr-cursor-themes`)
+4. `Cmd+Shift+P` → **Preferences: Color Theme** → выбери тему
 
-4. `Cmd+Shift+P` → **Preferences: Color Theme** → выбери одну из трёх **Aleksandr …**.
+---
 
-## Подкрутить под себя
+## Способ 3 — VSIX
 
-Правь JSON в `themes/*-color-theme.json`:
+Если есть файл `aleksandr-cursor-themes-1.0.0.vsix` рядом:
 
-- `colors` — UI (sidebar, status bar, selection)
-- `tokenColors` — подсветка кода
+1. `Cmd+Shift+P` → **Extensions: Install from VSIX…**
+2. Выбери `.vsix`
+3. Reload → **Preferences: Color Theme**
 
-После правок: перезагрузи окно (`Developer: Reload Window`) или переустанови расширение из той же папки.
+---
 
-Быстрый тюнинг без правки темы — в User Settings:
+## Закрепить тему в настройках программы
+
+`Cmd+,` → открой **User** settings JSON (`Open User Settings (JSON)`) и добавь:
+
+```json
+{
+  "workbench.colorTheme": "Aleksandr Night Gold",
+  "workbench.preferredDarkColorTheme": "Aleksandr Night Gold",
+  "workbench.preferredLightColorTheme": "Aleksandr Light"
+}
+```
+
+Готовый сниппет: `cursor-user-settings.snippet.json`.
+
+Путь к User settings на Mac:
+
+```text
+~/Library/Application Support/Cursor/User/settings.json
+```
+
+---
+
+## Подкрутить цвета
+
+Правь `themes/*-color-theme.json`, затем снова `./install.sh` и **Reload Window**.
+
+Или без переустановки — в User settings:
 
 ```json
 {
   "workbench.colorCustomizations": {
     "[Aleksandr Night Gold]": {
-      "editor.background": "#0a0a0a",
-      "statusBar.background": "#111111"
-    }
-  },
-  "editor.tokenColorCustomizations": {
-    "[Aleksandr Night Gold]": {
-      "comments": "#777777",
-      "strings": "#7fd992"
+      "editor.background": "#0a0a0a"
     }
   }
-}
-```
-
-## Шрифт (по желанию)
-
-```json
-{
-  "editor.fontFamily": "JetBrains Mono, Menlo, monospace",
-  "editor.fontLigatures": true,
-  "editor.fontSize": 14
 }
 ```
