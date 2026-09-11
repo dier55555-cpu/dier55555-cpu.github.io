@@ -3,7 +3,7 @@
 set -euo pipefail
 
 SRC="$(cd "$(dirname "$0")" && pwd)"
-NAME="aleksandr.aleksandr-cursor-themes-1.0.0"
+NAME="aleksandr.aleksandr-cursor-themes-1.1.0"
 
 # Cursor (приоритет) и VS Code на всякий случай
 CANDIDATES=(
@@ -28,7 +28,7 @@ done
 
 # Если есть CLI Cursor — тоже через него
 if command -v cursor >/dev/null 2>&1; then
-  VSIX="${SRC}/aleksandr-cursor-themes-1.0.0.vsix"
+  VSIX="${SRC}/aleksandr-cursor-themes-1.1.0.vsix"
   if [[ -f "$VSIX" ]]; then
     cursor --install-extension "$VSIX" && echo "OK → cursor --install-extension"
   fi
@@ -43,7 +43,7 @@ echo
 echo "Дальше в Cursor:"
 echo "  1. Cmd+Shift+P → Developer: Reload Window"
 echo "  2. Cmd+Shift+P → Preferences: Color Theme"
-echo "  3. Выбери: Aleksandr Dark / Aleksandr Light / Aleksandr Night Gold"
+echo "  3. Выбери: Aleksandr Beige (бежевая) / Dark / Light / Night Gold"
 echo
 echo "Чтобы сразу включить тему, добавь в User settings:"
-echo "  \"workbench.colorTheme\": \"Aleksandr Night Gold\""
+echo "  \"workbench.colorTheme\": \"Aleksandr Beige\""
