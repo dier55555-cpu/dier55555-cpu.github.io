@@ -11,25 +11,17 @@
 
 ## Установка (чтобы темы были в обычном списке)
 
-### VSIX (проще всего)
+Путь `/Users/user/Projects/themes/...` **не существует** — файл в этом репозитории / PR.
 
-1. `Cmd+Shift+P` → **Open IDE** (если в Agents Window)
-2. `Cmd+Shift+P` → **Extensions: Install from VSIX…**
-3. Файл:
+### Скачать VSIX (проще всего)
 
-```text
-/Users/user/Projects/themes/aleksandr-cursor-themes/aleksandr-cursor-themes-1.1.0.vsix
-```
+1. Скачай:
+   https://github.com/dier55555-cpu/dier55555-cpu.github.io/raw/cursor/aleksandr-themes-6562/Cursor/themes/aleksandr-cursor-themes/aleksandr-cursor-themes-1.1.0.vsix
+2. `Cmd+Shift+P` → **Extensions: Install from VSIX…** → выбери скачанный файл
+3. **Developer: Reload Window**
+4. **Preferences: Color Theme** → **Aleksandr Beige**
 
-4. **Developer: Reload Window**
-5. **Preferences: Color Theme** → **Aleksandr Beige**
-
-### Скрипт
-
-```bash
-cd /Users/user/Projects/themes/aleksandr-cursor-themes
-chmod +x install.sh && ./install.sh
-```
+Подробно: [КАК-ВЫБРАТЬ.md](./КАК-ВЫБРАТЬ.md)
 
 ---
 
