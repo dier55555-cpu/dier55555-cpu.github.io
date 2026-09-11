@@ -1,0 +1,30 @@
+{
+  "name": "aleksandr-cursor-themes",
+  "displayName": "Aleksandr Cursor Themes",
+  "description": "Три кастомные темы Cursor для Александра: Dark, Light, Night Gold",
+  "version": "1.0.0",
+  "publisher": "aleksandr",
+  "engines": {
+    "vscode": "^1.74.0"
+  },
+  "categories": ["Themes"],
+  "contributes": {
+    "themes": [
+      {
+        "label": "Aleksandr Dark",
+        "uiTheme": "vs-dark",
+        "path": "./themes/aleksandr-dark-color-theme.json"
+      },
+      {
+        "label": "Aleksandr Light",
+        "uiTheme": "vs",
+        "path": "./themes/aleksandr-light-color-theme.json"
+      },
+      {
+        "label": "Aleksandr Night Gold",
+        "uiTheme": "vs-dark",
+        "path": "./themes/aleksandr-night-gold-color-theme.json"
+      }
+    ]
+  }
+}
