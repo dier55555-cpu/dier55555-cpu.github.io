@@ -1,0 +1,27 @@
+{
+  "name": "aleksandr-cursor-ru",
+  "displayName": "Русский интерфейс Cursor",
+  "description": "Включает русский язык панелей и настроек Cursor (через Russian Language Pack + locale.json).",
+  "version": "1.0.0",
+  "publisher": "aleksandr",
+  "engines": {
+    "vscode": "^1.74.0"
+  },
+  "categories": ["Other"],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "main": "./extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "aleksandrCursorRu.enableRussian",
+        "title": "Русский интерфейс: включить"
+      },
+      {
+        "command": "aleksandrCursorRu.showStatus",
+        "title": "Русский интерфейс: статус"
+      }
+    ]
+  }
+}
