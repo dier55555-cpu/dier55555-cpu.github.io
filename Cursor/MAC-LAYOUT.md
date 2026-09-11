@@ -9,6 +9,7 @@ mkdir -p "/Users/user/Projects/NOY/dendriit/легион"
 mkdir -p "/Users/user/Projects/NOY/Neyroagents"
 mkdir -p "/Users/user/Projects/Другие/bitrix-yurist"
 mkdir -p "/Users/user/Projects/Другие/Саприн и партнеры"
+mkdir -p "/Users/user/Projects/themes/aleksandr-cursor-themes"
 
 # Зеркало правил из git (этот репо) — по желанию:
 cd /Users/user/Projects/dier55555-cpu.github.io
@@ -28,7 +29,8 @@ git pull origin cursor/noya-global-keys-profiles-fd07
 ls -la "/Users/user/Projects/NOY"
 ls -la "/Users/user/Projects/NOY/dendriit"
 ls -la "/Users/user/Projects/Другие"
+ls -la "/Users/user/Projects/themes"
 ```
 
-Ожидаемо: `dendriit/{anna,легион}`, `Neyroagents`, `Другие/{bitrix-yurist,Саприн и партнеры}`.  
+Ожидаемо: `dendriit/{anna,легион}`, `Neyroagents`, `Другие/{bitrix-yurist,Саприн и партнеры}`, `themes/aleksandr-cursor-themes`.  
 MCP для Neyroagents — после ключей от Александра.
